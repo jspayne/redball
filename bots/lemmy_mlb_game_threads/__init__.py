@@ -14,6 +14,7 @@ import sys
 import traceback
 import tzlocal
 import time
+import ast
 
 import threading
 
@@ -3897,7 +3898,8 @@ Last Updated: """ + self.convert_timezone(
                 )
 
                 # Include team community dict
-                pkData.update({"teamSubs": self.teamSubs})
+                team_subs = ast.literal_eval(self.settings.get("Lemmy", {}).get("TEAM_URL_DICT", self.teamSubs))
+                pkData.update({"teamSubs": team_subs})
 
                 # Team leaders (hitting, pitching)
                 # Team stats
