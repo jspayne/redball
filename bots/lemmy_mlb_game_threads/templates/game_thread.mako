@@ -109,7 +109,10 @@ ${ondeck} is on deck\
 <%include file="scoring_plays.mako" />
 
 % endif
+% if not settings.get('Game Thread',{}).get('SUPPRESS_HIGHLIGHTS', False):
 <%include file="highlights.mako" />
+
+%endif
 
 <%include file="linescore.mako" />
 % endif
