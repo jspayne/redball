@@ -295,6 +295,11 @@ class Bot(object):
                 "reddit_clientId": redditInfo["reddit_appId"],
                 "reddit_clientSecret": redditInfo["reddit_appSecret"],
             },
+            "Lemmy Auth": {
+                "lemmy_username": redditInfo["reddit_appId"],
+                "lemmy_password": redditInfo["reddit_appSecret"],
+                "lemmy_instance": redditInfo["reddit_refreshToken"]
+            }
         }
         for x in (x for x in config.get_bot_config(self.id)):
             if x.get("category", "Default") not in cfg.keys():
