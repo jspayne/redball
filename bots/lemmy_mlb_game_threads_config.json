@@ -431,6 +431,30 @@
             ],
             "subkeys": [],
             "parent_key": null
+        },
+        {
+            "key": "SUPPRESS_SCORING_PLAYS",
+            "description": "Suppress scoring plays table in the Game Thread.",
+            "type": "bool",
+            "val": false,
+            "options": [
+                true,
+                false
+            ],
+            "subkeys": [],
+            "parent_key": ""
+        },
+                {
+            "key": "SUPPRESS_HIGHLIGHTS",
+            "description": "Suppress highlights table in the Game Thread.",
+            "type": "bool",
+            "val": false,
+            "options": [
+                true,
+                false
+            ],
+            "subkeys": [],
+            "parent_key": ""
         }
     ],
     "Comments": [
@@ -984,6 +1008,30 @@
             "type": "str",
             "val": "post_webhook.mako",
             "options": [],
+            "subkeys": [],
+            "parent_key": ""
+        },
+        {
+            "key": "SUPPRESS_SCORING_PLAYS",
+            "description": "Suppress scoring plays table in the Post Game Thread.",
+            "type": "bool",
+            "val": false,
+            "options": [
+                true,
+                false
+            ],
+            "subkeys": [],
+            "parent_key": ""
+        },
+                {
+            "key": "SUPPRESS_HIGHLIGHTS",
+            "description": "Suppress highlights table in the Post Game Thread.",
+            "type": "bool",
+            "val": false,
+            "options": [
+                true,
+                false
+            ],
             "subkeys": [],
             "parent_key": ""
         }
