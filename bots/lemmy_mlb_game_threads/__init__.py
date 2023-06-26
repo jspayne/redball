@@ -1903,6 +1903,35 @@ Posted: """
 
             skipFlag = True  # Skip first edit since the thread was just posted
 
+            # Submit Highlights Thread
+            if self.settings.get('Highlight Thread', {}).get('ENABLED', False):
+                self.log.info("Preparing to post highlight {} thread...".format(pk))
+                (highlightThread, highlightThreadText) = self.prep_and_post(
+                    "highlight",
+                    pk,
+                    postFooter="""
+    
+            Posted: """
+                               + self.convert_timezone(datetime.utcnow(), self.myTeam["venue"]["timeZone"]["id"])
+                               .strftime("%m/%d/%Y %I:%M:%S %p %Z"),
+                )
+                self.activeGames[pk].update(
+                    {
+                        "highlightThread": highlightThread,
+                        "highlightThreadText": highlightThreadText,
+                        "highlightThreadTitle": highlightThread["post"]["name"]
+                        if highlightThread not in [None, False]
+                        else None,
+                    }
+                )
+                # Thread is not posted, so don't start an update loop
+            if not self.activeGames[pk].get("highlightThread") and self.settings.get(
+                    "Highlight Thread", {}).get("ENABLED", True):
+                # Thread is enabled but failed to post
+                self.log.info("Highlight thread not posted. Don't try to update it.")
+                self.activeGames[pk].update({"highlightThreadSkip": True})
+                return  # TODO: Determine why thread is not posted and retry if temporary issue
+
         if (
             self.settings.get("Comments", {}).get("ENABLED", True)
             and self.activeGames[pk].get("gameThread")
@@ -2025,6 +2054,53 @@ Last Updated: """ + self.convert_timezone(
                         self.commonData[pk]["schedule"]["status"]["statusCode"],
                         edit=False,
                     )
+                if self.settings.get('Highlight Thread', {}).get('ENABLED', False)\
+                        and not self.activeGames[pk].get('highlightSkip', False):
+                    # Re-generate highlight thread code, compare to current code, edit if different
+                    text = self.render_template(
+                        thread="highlight",
+                        templateType="thread",
+                        data=self.commonData,
+                        gamePk=pk,
+                        settings=self.settings,
+                    )
+                    self.log.debug("rendered highlight {} thread text: {}".format(pk, text))
+                    if text != self.activeGames[pk].get("highlightThreadText") and text != "":
+                        self.activeGames[pk].update({"highlightThreadText": text})
+                        # Add last updated timestamp
+                        text += """
+
+            Last Updated: """ + self.convert_timezone(
+                            datetime.utcnow(), self.myTeam["venue"]["timeZone"]["id"]
+                        ).strftime(
+                            "%m/%d/%Y %I:%M:%S %p %Z"
+                        )
+                        text = self._truncate_post(text)
+                        self.lemmy.editPost(
+                            self.activeGames[pk]["highlightThread"]["post"]["id"], body=text
+                        )
+                        self.log.info("Edits submitted for {} highlight thread.".format(pk))
+                        self.count_check_edit(
+                            self.activeGames[pk]["highlightThread"]["post"]["id"],
+                            self.commonData[pk]["schedule"]["status"]["statusCode"],
+                            edit=True,
+                        )
+                        self.log_last_updated_date_in_db(
+                            self.activeGames[pk]["highlightThread"]["post"]["id"]
+                        )
+                    elif text == "":
+                        self.log.info(
+                            "Skipping highlight thread {} edit since thread text is blank...".format(
+                                pk
+                            )
+                        )
+                    else:
+                        self.log.info("No changes to {} highlight thread.".format(pk))
+                        self.count_check_edit(
+                            self.activeGames[pk]["highlightThread"]["post"]["id"],
+                            self.commonData[pk]["schedule"]["status"]["statusCode"],
+                            edit=False,
+                        )
 
             update_game_thread_until = self.settings.get("Game Thread", {}).get(
                 "UPDATE_UNTIL", ""
@@ -2481,9 +2557,9 @@ Last Updated: """ + self.convert_timezone(
                 break
             elif update_postgame_thread_until == "An hour after thread is posted":
                 if (
-                        datetime.now() - datetime.strptime(self.activeGames[pk]["postGameThread"]["post"]["published"],
+                        datetime.utcnow() - datetime.strptime(self.activeGames[pk]["postGameThread"]["post"]["published"],
                                                            '%Y-%m-%dT%H:%M:%S.%f')
-                        <= timedelta(hours=1)
+                        >= timedelta(hours=1)
                 ):
                     # Post game thread was posted more than an hour ago
                     self.log.info(
@@ -5195,7 +5271,7 @@ Last Updated: """ + self.convert_timezone(
         return True
 
     def prep_and_post(self, thread, pk=None, postFooter=None):
-        # thread = ['weekly', 'off', 'gameday', 'game', 'post']
+        # thread = ['weekly', 'off', 'gameday', 'game', 'post', 'highlight']
         # pk = gamePk or list of gamePks
         # postFooter = text to append to post body, but not to include in return text value
         #   (normally contains a timestamp that would prevent comparison next time to check for changes)
@@ -5230,6 +5306,8 @@ Last Updated: """ + self.convert_timezone(
             if thread == "game"
             else self.settings.get("Post Game Thread", {}).get("TITLE_MOD", "")
             if thread == "post"
+            else self.settings.get("Highlight Thread", {}).get("TITLE_MOD", "")
+            if thread == "highlight"
             else ""
         )
         if "upper" in title_mod.lower():
