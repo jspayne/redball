@@ -958,7 +958,8 @@ class Bot(object):
                     }
                 )
                 # Only sticky when posting the thread
-                if self.settings.get('Reddit',{}).get('STICKY',False): self.sticky_thread(offDayThread)
+                if self.settings.get("Reddit", {}).get("STICKY", False):
+                    self.sticky_thread(offDayThread)
 
         if not offDayThread:
             (offDayThread, offDayThreadText) = self.prep_and_post(
@@ -1030,7 +1031,9 @@ Last Updated: """
                         text = self._truncate_post(text)
                         self.lemmy.editPost(offDayThread["post"]["id"], text)
                         self.log.info("Off day thread edits submitted.")
-                        self.count_check_edit(offDayThread["post"]["id"], "NA", edit=True)
+                        self.count_check_edit(
+                            offDayThread["post"]["id"], "NA", edit=True
+                        )
                         self.log_last_updated_date_in_db(offDayThread["post"]["id"])
                     elif text == "":
                         self.log.info(
@@ -1038,7 +1041,9 @@ Last Updated: """
                         )
                     else:
                         self.log.info("No changes to off day thread.")
-                        self.count_check_edit(offDayThread["post"]["id"], "NA", edit=False)
+                        self.count_check_edit(
+                            offDayThread["post"]["id"], "NA", edit=False
+                        )
                 except Exception as e:
                     self.log.error("Error editing off day thread: {}".format(e))
                     self.error_notification("Error editing off day thread")
@@ -1255,7 +1260,8 @@ Last Updated: """
                     }
                 )
                 # Only sticky when posting the thread
-                if self.settings.get('Reddit',{}).get('STICKY',False): self.sticky_thread(gameDayThread)
+                if self.settings.get("Reddit", {}).get("STICKY", False):
+                    self.sticky_thread(gameDayThread)
 
         # Check if post game thread is already posted, and skip game day thread if so
         if (
@@ -1874,7 +1880,7 @@ Last Updated: """
                 # Submit Highlights Thread
                 # Something is funky in the return logic after the game thread,
                 # so submit the hightlights thread first
-                if self.settings.get('Highlight Thread', {}).get('ENABLED', False):
+                if self.settings.get("Highlight Thread", {}).get("ENABLED", False):
                     self.log.info("Preparing to post highlight {} thread...".format(pk))
                     (highlightThread, highlightThreadText) = self.prep_and_post(
                         "highlight",
@@ -1882,8 +1888,9 @@ Last Updated: """
                         postFooter="""
 
                 Posted: """
-                                   + self.convert_timezone(datetime.utcnow(), self.myTeam["venue"]["timeZone"]["id"])
-                                   .strftime("%m/%d/%Y %I:%M:%S %p %Z"),
+                        + self.convert_timezone(
+                            datetime.utcnow(), self.myTeam["venue"]["timeZone"]["id"]
+                        ).strftime("%m/%d/%Y %I:%M:%S %p %Z"),
                     )
                     self.activeGames[pk].update(
                         {
@@ -1895,10 +1902,13 @@ Last Updated: """
                         }
                     )
                     # Thread is not posted, so don't start an update loop
-                if not self.activeGames[pk].get("highlightThread") and self.settings.get(
-                        "Highlight Thread", {}).get("ENABLED", True):
+                if not self.activeGames[pk].get(
+                    "highlightThread"
+                ) and self.settings.get("Highlight Thread", {}).get("ENABLED", True):
                     # Thread is enabled but failed to post
-                    self.log.info("Highlight thread not posted. Don't try to update it.")
+                    self.log.info(
+                        "Highlight thread not posted. Don't try to update it."
+                    )
                     self.activeGames[pk].update({"highlightThreadSkip": True})
 
                 # Submit Game Thread
@@ -1932,7 +1942,6 @@ Posted: """
                 return  # TODO: Determine why thread is not posted and retry if temporary issue
 
             skipFlag = True  # Skip first edit since the thread was just posted
-
 
         if (
             self.settings.get("Comments", {}).get("ENABLED", True)
@@ -2056,8 +2065,9 @@ Last Updated: """ + self.convert_timezone(
                         self.commonData[pk]["schedule"]["status"]["statusCode"],
                         edit=False,
                     )
-                if self.settings.get('Highlight Thread', {}).get('ENABLED', False)\
-                        and not self.activeGames[pk].get('highlightSkip', False):
+                if self.settings.get("Highlight Thread", {}).get(
+                    "ENABLED", False
+                ) and not self.activeGames[pk].get("highlightSkip", False):
                     # Re-generate highlight thread code, compare to current code, edit if different
                     text = self.render_template(
                         thread="highlight",
@@ -2066,8 +2076,13 @@ Last Updated: """ + self.convert_timezone(
                         gamePk=pk,
                         settings=self.settings,
                     )
-                    self.log.debug("rendered highlight {} thread text: {}".format(pk, text))
-                    if text != self.activeGames[pk].get("highlightThreadText") and text != "":
+                    self.log.debug(
+                        "rendered highlight {} thread text: {}".format(pk, text)
+                    )
+                    if (
+                        text != self.activeGames[pk].get("highlightThreadText")
+                        and text != ""
+                    ):
                         self.activeGames[pk].update({"highlightThreadText": text})
                         # Add last updated timestamp
                         text += """
@@ -2079,9 +2094,12 @@ Last Updated: """ + self.convert_timezone(
                         )
                         text = self._truncate_post(text)
                         self.lemmy.editPost(
-                            self.activeGames[pk]["highlightThread"]["post"]["id"], body=text
+                            self.activeGames[pk]["highlightThread"]["post"]["id"],
+                            body=text,
                         )
-                        self.log.info("Edits submitted for {} highlight thread.".format(pk))
+                        self.log.info(
+                            "Edits submitted for {} highlight thread.".format(pk)
+                        )
                         self.count_check_edit(
                             self.activeGames[pk]["highlightThread"]["post"]["id"],
                             self.commonData[pk]["schedule"]["status"]["statusCode"],
@@ -2392,7 +2410,8 @@ Last Updated: """ + self.convert_timezone(
                     }
                 )
                 # Only sticky when posting the thread
-                if self.settings.get('Reddit',{}).get('STICKY',False): self.sticky_thread(self.activeGames[pk]['postGameThread'])
+                if self.settings.get("Reddit", {}).get("STICKY", False):
+                    self.sticky_thread(self.activeGames[pk]["postGameThread"])
 
         game_result = (
             "EXCEPTION"
@@ -2558,11 +2577,10 @@ Last Updated: """ + self.convert_timezone(
                 self.activeGames[pk].update({"POST_STOP_FLAG": True})
                 break
             elif update_postgame_thread_until == "An hour after thread is posted":
-                if (
-                        datetime.utcnow() - datetime.strptime(self.activeGames[pk]["postGameThread"]["post"]["published"],
-                                                           '%Y-%m-%dT%H:%M:%S.%f')
-                        >= timedelta(hours=1)
-                ):
+                if datetime.utcnow() - datetime.strptime(
+                    self.activeGames[pk]["postGameThread"]["post"]["published"],
+                    "%Y-%m-%dT%H:%M:%S.%f",
+                ) >= timedelta(hours=1):
                     # Post game thread was posted more than an hour ago
                     self.log.info(
                         "Post game thread was posted an hour ago. Stopping post game thread update loop per UPDATE_UNTIL setting."
@@ -4005,7 +4023,7 @@ Last Updated: """ + self.convert_timezone(
                 if len(gamePks) == 0:
                     self.log.warning("No gamePks to collect data for.")
                     return False
-                
+
                 for pk in gamePks[:]:
                     if self.commonData.get(pk) and self.commonData[pk].get(
                         "lastUpdate", datetime.today() - timedelta(hours=1)
@@ -6413,9 +6431,11 @@ Last Updated: """ + self.convert_timezone(
 
     def _truncate_post(self, text):
         warning_text = " \  # Truncated, post length limit reached."
-        max_length = self.settings.get("Lemmy", {}).get("POST_CHARACTER_LIMIT", 10000) - len(warning_text)
+        max_length = self.settings.get("Lemmy", {}).get(
+            "POST_CHARACTER_LIMIT", 10000
+        ) - len(warning_text)
         if len(text) >= max_length:
-            new_text = text[0:max_length - 1]
+            new_text = text[0 : max_length - 1]
             new_text += warning_text
         else:
             new_text = text
