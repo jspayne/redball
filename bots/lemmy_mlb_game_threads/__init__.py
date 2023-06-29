@@ -1871,6 +1871,36 @@ Last Updated: """
                         "Game thread is disabled, so skipping for game {}...".format(pk)
                     )
             else:
+                # Submit Highlights Thread
+                # Something is funky in the return logic after the game thread,
+                # so submit the hightlights thread first
+                if self.settings.get('Highlight Thread', {}).get('ENABLED', False):
+                    self.log.info("Preparing to post highlight {} thread...".format(pk))
+                    (highlightThread, highlightThreadText) = self.prep_and_post(
+                        "highlight",
+                        pk,
+                        postFooter="""
+
+                Posted: """
+                                   + self.convert_timezone(datetime.utcnow(), self.myTeam["venue"]["timeZone"]["id"])
+                                   .strftime("%m/%d/%Y %I:%M:%S %p %Z"),
+                    )
+                    self.activeGames[pk].update(
+                        {
+                            "highlightThread": highlightThread,
+                            "highlightThreadText": highlightThreadText,
+                            "highlightThreadTitle": highlightThread["post"]["name"]
+                            if highlightThread not in [None, False]
+                            else None,
+                        }
+                    )
+                    # Thread is not posted, so don't start an update loop
+                if not self.activeGames[pk].get("highlightThread") and self.settings.get(
+                        "Highlight Thread", {}).get("ENABLED", True):
+                    # Thread is enabled but failed to post
+                    self.log.info("Highlight thread not posted. Don't try to update it.")
+                    self.activeGames[pk].update({"highlightThreadSkip": True})
+
                 # Submit Game Thread
                 self.log.info("Preparing to post game {} thread...".format(pk))
                 (gameThread, gameThreadText) = self.prep_and_post(
@@ -1903,34 +1933,6 @@ Posted: """
 
             skipFlag = True  # Skip first edit since the thread was just posted
 
-            # Submit Highlights Thread
-            if self.settings.get('Highlight Thread', {}).get('ENABLED', False):
-                self.log.info("Preparing to post highlight {} thread...".format(pk))
-                (highlightThread, highlightThreadText) = self.prep_and_post(
-                    "highlight",
-                    pk,
-                    postFooter="""
-    
-            Posted: """
-                               + self.convert_timezone(datetime.utcnow(), self.myTeam["venue"]["timeZone"]["id"])
-                               .strftime("%m/%d/%Y %I:%M:%S %p %Z"),
-                )
-                self.activeGames[pk].update(
-                    {
-                        "highlightThread": highlightThread,
-                        "highlightThreadText": highlightThreadText,
-                        "highlightThreadTitle": highlightThread["post"]["name"]
-                        if highlightThread not in [None, False]
-                        else None,
-                    }
-                )
-                # Thread is not posted, so don't start an update loop
-            if not self.activeGames[pk].get("highlightThread") and self.settings.get(
-                    "Highlight Thread", {}).get("ENABLED", True):
-                # Thread is enabled but failed to post
-                self.log.info("Highlight thread not posted. Don't try to update it.")
-                self.activeGames[pk].update({"highlightThreadSkip": True})
-                return  # TODO: Determine why thread is not posted and retry if temporary issue
 
         if (
             self.settings.get("Comments", {}).get("ENABLED", True)
@@ -5524,6 +5526,8 @@ Last Updated: """ + self.convert_timezone(
             if thread == "post"
             else self.settings.get("Comments", {}).get(setting, "")
             if thread == "comment"
+            else self.settings.get("Highlight Thread", {}).get(setting, "")
+            if thread == "highlight"
             else ""
         )
         try:
