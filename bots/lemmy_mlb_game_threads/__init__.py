@@ -2287,6 +2287,9 @@ Last Updated: """ + self.convert_timezone(
         # Mark game thread as stale
         if self.activeGames[pk].get("gameThread"):
             self.staleThreads.append(self.activeGames[pk]["gameThread"])
+            # If there is a highlight thread, unsticky it as well
+            if self.activeGames[pk].get("highlightThread", None):
+                self.staleThreads.append(self.activeGames[pk]["highlightThread"])
 
         self.log.debug("Ending game update thread...")
         return
