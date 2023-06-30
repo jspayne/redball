@@ -2577,10 +2577,11 @@ Last Updated: """ + self.convert_timezone(
                 self.activeGames[pk].update({"POST_STOP_FLAG": True})
                 break
             elif update_postgame_thread_until == "An hour after thread is posted":
-                if datetime.utcnow() - datetime.strptime(
-                    self.activeGames[pk]["postGameThread"]["post"]["published"],
-                    "%Y-%m-%dT%H:%M:%S.%f",
-                ) >= timedelta(hours=1):
+                if (
+                        datetime.utcnow() - datetime.strptime(self.activeGames[pk]["postGameThread"]["post"]["published"],
+                                                           '%Y-%m-%dT%H:%M:%S.%f')
+                        >= timedelta(hours=1)
+                ):
                     # Post game thread was posted more than an hour ago
                     self.log.info(
                         "Post game thread was posted an hour ago. Stopping post game thread update loop per UPDATE_UNTIL setting."
