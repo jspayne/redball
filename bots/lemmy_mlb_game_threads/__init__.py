@@ -14,7 +14,6 @@ import sys
 import traceback
 import tzlocal
 import time
-import ast
 
 import threading
 
@@ -52,8 +51,8 @@ class Bot(object):
         if self.settings.get("Bot", {}).get("TEMPLATE_PATH", "") != "":
             self.BOT_TEMPLATE_PATH.append(self.settings["Bot"]["TEMPLATE_PATH"])
         self.BOT_TEMPLATE_PATH.append(os.path.join(self.BOT_PATH, "templates"))
-
         self.LOOKUP = TemplateLookup(directories=self.BOT_TEMPLATE_PATH)
+        self.BOT_CONFIG_PATH = self.settings.get("Bot", {}).get("CONFIG_PATH", "") or os.path.join(self.BOT_PATH, "config")
 
     def run(self):
         self.log = logger.init_logger(
@@ -3897,9 +3896,16 @@ Last Updated: """ + self.convert_timezone(
                     {"nextGame": self.get_nextGame(self.myTeam["id"])}
                 )
 
-                # Include team community dict
-                team_subs = ast.literal_eval(self.settings.get("Lemmy", {}).get("TEAM_URL_DICT", self.teamSubs))
-                pkData.update({"teamSubs": team_subs})
+                # Update team community dict
+                team_url_file = os.path.join(self.BOT_CONFIG_PATH, self.settings.get("Lemmy", {}).get("TEAM_URL_FILE") or "team_urls.json")
+                with open(team_url_file, 'r') as f:
+                    team_subs = json.load(f)
+                # Convert the keys to int to coincide with the MLB data
+                # If the config file is empty or incomplete, this will use self.teamSubs as the default.
+                for key, val in team_subs.items():
+                    self.teamSubs[int(key)] = val
+                self.teamSubs['mlb'] = self.teamSubs[0]  # handle this separately so we don't have to mix string and int keys in the config file
+                pkData.update({"teamSubs": self.teamSubs})
 
                 # Team leaders (hitting, pitching)
                 # Team stats
