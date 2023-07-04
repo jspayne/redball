@@ -893,24 +893,7 @@ class Bot(object):
             return
 
         # Unsticky stale threads
-        if self.settings.get("Reddit", {}).get("STICKY", False):
-            """
-            # Make sure the subreddit's sticky posts are marked as stale
-            try:
-                sticky1 = self.subreddit.sticky(1)
-                if sticky1.author == self.reddit.user.me() and sticky1 not in self.staleThreads:
-                    self.staleThreads.append(sticky1)
-
-                sticky2 = self.subreddit.sticky(2)
-                if sticky2.author == self.reddit.user.me() and sticky2 not in self.staleThreads:
-                    self.staleThreads.append(sticky2)
-            except Exception:
-                # Exception likely due to no post being stickied (or only one), so ignore it...
-                pass
-            """
-            if len(self.staleThreads):
-                self.unsticky_threads(self.staleThreads)
-                self.staleThreads = []
+        self.process_stale_threads()
 
         # Check DB for existing off day thread
         oq = "select * from {}threads where gamePk = {} and type='off' and deleted=0;".format(
@@ -1115,9 +1098,7 @@ Last Updated: """
         if redball.SIGNAL is not None or self.bot.STOP:
             self.log.debug("Caught a stop signal...")
 
-        # Mark off day thread as stale so it will be unstickied tomorrow
-        if offDayThread:
-            self.staleThreads.append(offDayThread)
+        self.mark_thread_stale("off", "offDayThread")
 
         self.log.debug("Ending off day update thread...")
         return
@@ -1184,28 +1165,7 @@ Last Updated: """
             self.log.debug("Caught a stop signal...")
             return
 
-        # Unsticky stale threads
-        # if self.settings.get("Reddit", {}).get("STICKY", False):
-        #     """
-        #     # Make sure the subreddit's sticky posts are marked as stale
-        #     try:
-        #         sticky1 = self.subreddit.sticky(1)
-        #         if sticky1.author == self.reddit.user.me() and sticky1 not in self.staleThreads and not next((True for v in self.activeGames.values() if sticky1 in [v.get('gameThread'), v.get('postGameThread')]), None):
-        #             self.log.debug('Marking {} as stale (top sticky slot).'.format(sticky1.id))
-        #             self.staleThreads.append(sticky1)
-
-        #         sticky2 = self.subreddit.sticky(2)
-        #         if sticky2.author == self.reddit.user.me() and sticky2 not in self.staleThreads and not next((True for v in self.activeGames.values() if sticky2 in [v.get('gameThread'), v.get('postGameThread')]), None):
-        #             self.log.debug('Marking {} as stale (bottom sticky slot).'.format(sticky2.id))
-        #             self.staleThreads.append(sticky2)
-        #     except Exception:
-        #         # Exception likely due to no post being stickied (or only one), so ignore it...
-        #         pass
-        #     """
-
-        #     if len(self.staleThreads):
-        #         self.unsticky_threads(self.staleThreads)
-        #         self.staleThreads = []
+        self.process_stale_threads()
 
         # Check if game day thread already posted (record in threads table with gamePk and type='gameday' for any of today's gamePks)
         gdq = "select * from {}threads where type='gameday' and gamePk in ({}) and gameDate = '{}' and deleted=0;".format(
@@ -1528,9 +1488,7 @@ Last Updated: """
             self.log.debug("Caught a stop signal...")
             return
 
-        # Mark game day thread as stale
-        if self.activeGames[pk].get("gameDayThread"):
-            self.staleThreads.append(self.activeGames[pk]["gameDayThread"])
+        self.mark_thread_stale("gameday", "gameDayThread")
 
         self.log.debug("Ending gameday update thread...")
         return
@@ -1844,21 +1802,7 @@ Last Updated: """
                 self.log.debug("Caught a stop signal...")
                 return
 
-            # Unsticky stale threads
-            if self.settings.get("Reddit", {}).get("STICKY", False):
-                # Make sure game day thread is marked as stale, since we want the game thread to be sticky instead
-                if (
-                    self.activeGames.get("gameday", {}).get("gameDayThread")
-                    and self.activeGames["gameday"]["gameDayThread"]
-                    not in self.staleThreads
-                ):
-                    self.staleThreads.append(
-                        self.activeGames["gameday"]["gameDayThread"]
-                    )
-
-                if len(self.staleThreads):
-                    self.unsticky_threads(self.staleThreads)
-                    self.staleThreads = []
+            self.process_stale_threads()
 
             if skipFlag or not self.settings.get("Game Thread", {}).get(
                 "ENABLED", True
@@ -2188,9 +2132,7 @@ Last Updated: """ + self.convert_timezone(
         self.log.info("All finished with game {}!".format(pk))
         self.activeGames[pk].update({"STOP_FLAG": True})
 
-        # Mark game thread as stale
-        if self.activeGames[pk].get("gameThread"):
-            self.staleThreads.append(self.activeGames[pk]["gameThread"])
+        self.mark_thread_stale('game', 'gameThread')
 
         self.log.debug("Ending game update thread...")
         return
@@ -2253,18 +2195,7 @@ Last Updated: """ + self.convert_timezone(
             self.log.debug("Caught a stop signal...")
             return
 
-        # Unsticky stale threads
-        if self.settings.get("Reddit", {}).get("STICKY", False):
-            # Make sure game thread is marked as stale, since we want the post game thread to be sticky instead
-            if (
-                self.activeGames[pk].get("gameThread")
-                and self.activeGames[pk]["gameThread"] not in self.staleThreads
-            ):
-                self.staleThreads.append(self.activeGames[pk]["gameThread"])
-
-            if len(self.staleThreads):
-                self.unsticky_threads(self.staleThreads)
-                self.staleThreads = []
+        self.process_stale_threads()
 
         # TODO: Skip for (straight?) doubleheader game 1?
         # TODO: Loop in case thread creation fails due to title template error or API error? At least break from update loop...
@@ -2546,9 +2477,7 @@ Last Updated: """ + self.convert_timezone(
             self.log.debug("Caught a stop signal...")
             return
 
-        # Mark post game thread as stale if sticky is enabled
-        if postGameThread:
-            self.staleThreads.append(postGameThread)
+        self.mark_thread_stale('post', 'postGameThread')
         self.log.debug("Ending post game update thread...")
         return  # All done with this game!
 
@@ -5494,19 +5423,41 @@ Last Updated: """ + self.convert_timezone(
                 )
             )
 
-    def unsticky_threads(self, threads):
-        for t in threads:
-            try:
-                self.log.debug(
-                    "Attempting to unsticky thread [{}]".format(t["post"]["id"])
+    def mark_thread_stale(self, ttype, thread):
+        # Schedule thread for deferred processing
+        # (Currently just unstickys it)
+        if self.settings.get("Lemmy", {}).get("STICKY", False):
+            if (
+                    self.activeGames.get(ttype, {}).get(thread)
+                    and self.activeGames[ttype][thread]
+                    not in self.staleThreads
+            ):
+                self.staleThreads.append(
+                    self.activeGames[ttype][thread]
                 )
-                self.lemmy.unStickyPost(t["post"]["id"])
-            except Exception:
-                self.log.debug(
-                    "Unsticky of thread [{}] failed. Check mod privileges or the thread may not have been sticky.".format(
-                        t.id
-                    )
+
+    def process_stale_threads(self):
+        # This function is for any deferred thread updates
+        # Threads are marked stale when they finish updating
+        # and this function is typically called before the next
+        # type of thread is posted.
+        # Currently this function just unstickys stale threads
+        for t in self.staleThreads:
+            self.unsticky_thread(t)
+        self.staleThreads = []
+
+    def unsticky_thread(self, thread):
+        try:
+            self.log.debug(
+                "Attempting to unsticky thread [{}]".format(thread["post"]["id"])
+            )
+            self.lemmy.unStickyPost(thread["post"]["id"])
+        except Exception:
+            self.log.debug(
+                "Unsticky of thread [{}] failed. Check mod privileges or the thread may not have been sticky.".format(
+                    thread.id
                 )
+            )
 
     def api_call(self, endpoint, params, retries=-1, force=False):
         s = {}
