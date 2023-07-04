@@ -3904,7 +3904,6 @@ Last Updated: """ + self.convert_timezone(
                 # If the config file is empty or incomplete, this will use self.teamSubs as the default.
                 for key, val in team_subs.items():
                     self.teamSubs[int(key)] = val
-                self.teamSubs['mlb'] = self.teamSubs[0]  # handle this separately so we don't have to mix string and int keys in the config file
                 pkData.update({"teamSubs": self.teamSubs})
 
                 # Team leaders (hitting, pitching)
@@ -5751,7 +5750,6 @@ Last Updated: """ + self.convert_timezone(
         120: "/c/nationals@fanaticus.social",
         144: "/c/braves@fanaticus.social",
         0: "/c/baseball@fanaticus.social",
-        "mlb": "/c/baseball@fanaticus.social",
     }
 
     def bot_state(self):
