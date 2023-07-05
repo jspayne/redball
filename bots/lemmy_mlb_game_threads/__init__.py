@@ -5432,9 +5432,12 @@ Last Updated: """ + self.convert_timezone(
                     and self.activeGames[ttype][thread]
                     not in self.staleThreads
             ):
+                self.log.debug(f"Marking {thread} stale.")
                 self.staleThreads.append(
                     self.activeGames[ttype][thread]
                 )
+            else:
+                self.log.debug(f"Unable to mark {thread} stale.")
 
     def process_stale_threads(self):
         # This function is for any deferred thread updates
@@ -5442,6 +5445,7 @@ Last Updated: """ + self.convert_timezone(
         # and this function is typically called before the next
         # type of thread is posted.
         # Currently this function just unstickys stale threads
+        self.log.debug(f"Processing stale threads.")
         for t in self.staleThreads:
             self.unsticky_thread(t)
         self.staleThreads = []
