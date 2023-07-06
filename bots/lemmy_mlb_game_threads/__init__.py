@@ -893,7 +893,7 @@ class Bot(object):
             return
 
         # Unsticky stale threads
-        if self.settings.get("Reddit", {}).get("STICKY", False):
+        if self.settings.get("Lemmy", {}).get("STICKY", False):
             """
             # Make sure the subreddit's sticky posts are marked as stale
             try:
@@ -1851,7 +1851,7 @@ Last Updated: """
                 return
 
             # Unsticky stale threads
-            if self.settings.get("Reddit", {}).get("STICKY", False):
+            if self.settings.get("Lemmy", {}).get("STICKY", False):
                 # Make sure game day thread is marked as stale, since we want the game thread to be sticky instead
                 if (
                     self.activeGames.get("gameday", {}).get("gameDayThread")
@@ -2353,7 +2353,7 @@ Last Updated: """ + self.convert_timezone(
             return
 
         # Unsticky stale threads
-        if self.settings.get("Reddit", {}).get("STICKY", False):
+        if self.settings.get("Lemmy", {}).get("STICKY", False):
             # Make sure game thread is marked as stale, since we want the post game thread to be sticky instead
             if (
                 self.activeGames[pk].get("gameThread")
@@ -5318,7 +5318,7 @@ Last Updated: """ + self.convert_timezone(
             title = None
             self.error_notification(f"Error rendering title for {thread} thread")
 
-        sticky = self.settings.get("Reddit", {}).get("STICKY", False) is True
+        sticky = self.settings.get("Lemmy", {}).get("STICKY", False) is True
         title_mod = (
             self.settings.get("Weekly Thread", {}).get("TITLE_MOD", "")
             if thread == "weekly"
@@ -5740,11 +5740,11 @@ Last Updated: """ + self.convert_timezone(
             self.log.info("Restarted logger with new settings")
 
         if (
-            self.prevSettings["Reddit Auth"] != self.settings["Reddit Auth"]
-            or self.prevSettings["Reddit"] != self.settings["Reddit"]
+            self.prevSettings["Lemmy Auth"] != self.settings["Lemmy Auth"]
+            or self.prevSettings["Lemmy"] != self.settings["Lemmy"]
         ):
             self.log.info(
-                "Detected new Reddit Authorization info. Re-initializing Reddit API..."
+                "Detected new Lemmy Authorization info. Re-initializing Lemmy API..."
             )
             self.init_lemmy()
 
@@ -5755,9 +5755,9 @@ Last Updated: """ + self.convert_timezone(
         with redball.REDDIT_AUTH_LOCKS[str(self.bot.redditAuth)]:
             try:
                 # Check for Lemmy
-                instance_name = self.settings.get("Lemmy", {}).get("INSTANCE_NAME", "")
-                username = self.settings.get("Lemmy", {}).get("USERNAME", "")
-                password = self.settings.get("Lemmy", {}).get("PASSWORD", "")
+                instance_name = self.settings.get("Lemmy Auth", {}).get("lemmy_instance", "")
+                username = self.settings.get("Lemmy Auth", {}).get("lemmy_username", "")
+                password = self.settings.get("Lemmy Auth", {}).get("lemmy_password", "")
                 community = self.settings.get("Lemmy", {}).get("COMMUNITY_NAME")
 
                 if "" in [instance_name, username, password, community]:

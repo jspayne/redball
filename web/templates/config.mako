@@ -176,10 +176,10 @@
 					<div id="redditAuth_new" class="redditAuth">
 						<form id="addRedditAuth" method="post" action="/config">
 							<label for="redditAuth_description">Description:</label> <input id="redditAuth_description" name="redditAuth_description" value="" class="text ui-widget-content ui-corner-all" /><br />
-							<label for="redditAuth_redditAppId">Reddit App ID:</label> <input id="redditAuth_redditAppId" name="redditAuth_redditAppId" value="" class="text ui-widget-content ui-corner-all" /><br />
-							<label for="redditAuth_redditAppSecret">Reddit App Secret:</label> <input id="redditAuth_redditAppSecret" name="redditAuth_redditAppSecret" value="" class="text ui-widget-content ui-corner-all" /><br />
-							<label for="redditAuth_redditRefreshToken">Reddit Refresh Token:</label> <input id="redditAuth_redditRefreshToken" name="redditAuth_redditRefreshToken" value="" class="text ui-widget-content ui-corner-all" /><br />
-							<label for="redditAuth_redditScopes">Reddit Scopes:</label> <select name="redditAuth_redditScopes" multiple class="text ui-widget-content ui-corner-all">
+							<label for="redditAuth_redditAppId" title="App ID or Lemmy User Name">Reddit App ID:</label> <input id="redditAuth_redditAppId" name="redditAuth_redditAppId" value="" class="text ui-widget-content ui-corner-all" /><br />
+							<label for="redditAuth_redditAppSecret" title="App Secret or Lemmy Password">Reddit App Secret:</label> <input id="redditAuth_redditAppSecret" name="redditAuth_redditAppSecret" value="" class="text ui-widget-content ui-corner-all" /><br />
+							<label for="redditAuth_redditRefreshToken" title="Refresh Token or Lemmy Instance URL">Reddit Refresh Token:</label> <input id="redditAuth_redditRefreshToken" name="redditAuth_redditRefreshToken" value="" class="text ui-widget-content ui-corner-all" /><br />
+							<label for="redditAuth_redditScopes" title="Not used for Lemmy">Reddit Scopes:</label> <select name="redditAuth_redditScopes" multiple class="text ui-widget-content ui-corner-all">
 								% for redditScope in config.get_redditScopes():
 									<option value="${redditScope['name']}" selected="selected">${redditScope['name']}</option>
 								% endfor
