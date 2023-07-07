@@ -1145,13 +1145,14 @@
     ],
     "Bot": [
         {
-            "key": "TEMPLATE_PATH",
-            "description": "Path where custom templates are stored (defaults to the same path as the standard templates).",
+            "key": "CONFIG_PATH",
+            "description": "Path where custom configuration files are stored (defaults to the bot config directory).",
             "type": "str",
             "val": "",
             "options": [],
             "subkeys": [],
             "parent_key": null
+
         }
     ],
     "Weekly Thread": [
