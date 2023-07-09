@@ -2247,7 +2247,7 @@ Last Updated: """ + self.convert_timezone(
                         self.commonData[pk]["schedule"]["status"]["codedGameState"],
                     )
                 )
-                self.sleep(60)
+            self.sleep(60)
 
         if redball.SIGNAL is not None or self.bot.STOP:
             self.log.debug("Caught a stop signal...")
