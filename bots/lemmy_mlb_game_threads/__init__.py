@@ -3,13 +3,12 @@
 """MLB Game Thread Bot
 by Todd Roberts
 """
-
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.schedulers import SchedulerNotRunningError
 from datetime import datetime, timedelta
+from inspect import currentframe
 import json
 import pytz
-import requests
 import sys
 import traceback
 import tzlocal
@@ -34,7 +33,11 @@ __version__ = "1.0.0"
 
 GENERIC_DATA_LOCK = threading.Lock()
 GAME_DATA_LOCK = threading.Lock()
+POST_DT_FORMAT = "%Y-%m-%dT%H:%M:%S.%f"
+MLB_DT_FORMAT = "%Y-%m-%dT%H:%M:%SZ"
 
+def LINE():
+    return currentframe().f_back.f_back.f_lineno
 
 def run(bot, settings):
     thisBot = Bot(bot, settings)
@@ -51,7 +54,6 @@ class Bot(object):
         if self.settings.get("Bot", {}).get("TEMPLATE_PATH", "") != "":
             self.BOT_TEMPLATE_PATH.append(self.settings["Bot"]["TEMPLATE_PATH"])
         self.BOT_TEMPLATE_PATH.append(os.path.join(self.BOT_PATH, "templates"))
-
         self.LOOKUP = TemplateLookup(directories=self.BOT_TEMPLATE_PATH)
 
     def run(self):
@@ -130,6 +132,26 @@ class Bot(object):
         else:
             self.log.debug(
                 f"The bot-{self.bot.id}-statusUpdateTask scheduled job already exists."
+            )
+
+        # Start a scheduled task to process stale threads every 10 minutes
+        if not next(
+            (
+                x
+                for x in self.bot.SCHEDULER.get_jobs()
+                if x.name == f"bot-{self.bot.id}-staleThreadsTask"
+            ),
+            None,
+        ):
+            self.bot.SCHEDULER.add_job(
+                self.process_stale_threads,
+                "interval",
+                name=f"bot-{self.bot.id}-staleThreadsTask",
+                minutes=10,
+            )
+        else:
+            self.log.debug(
+                f"The bot-{self.bot.id}-staleThreadsTask scheduled job already exists."
             )
 
         settings_date = datetime.today().strftime("%Y-%m-%d")
@@ -892,26 +914,6 @@ class Bot(object):
         if redball.SIGNAL is not None or self.bot.STOP:
             return
 
-        # Unsticky stale threads
-        if self.settings.get("Lemmy", {}).get("STICKY", False):
-            """
-            # Make sure the subreddit's sticky posts are marked as stale
-            try:
-                sticky1 = self.subreddit.sticky(1)
-                if sticky1.author == self.reddit.user.me() and sticky1 not in self.staleThreads:
-                    self.staleThreads.append(sticky1)
-
-                sticky2 = self.subreddit.sticky(2)
-                if sticky2.author == self.reddit.user.me() and sticky2 not in self.staleThreads:
-                    self.staleThreads.append(sticky2)
-            except Exception:
-                # Exception likely due to no post being stickied (or only one), so ignore it...
-                pass
-            """
-            if len(self.staleThreads):
-                self.unsticky_threads(self.staleThreads)
-                self.staleThreads = []
-
         # Check DB for existing off day thread
         oq = "select * from {}threads where gamePk = {} and type='off' and deleted=0;".format(
             self.dbTablePrefix, self.today["Ymd"]
@@ -958,7 +960,8 @@ class Bot(object):
                     }
                 )
                 # Only sticky when posting the thread
-                if self.settings.get('Reddit',{}).get('STICKY',False): self.sticky_thread(offDayThread)
+                if self.settings.get("Reddit", {}).get("STICKY", False):
+                    self.sticky_thread(offDayThread)
 
         if not offDayThread:
             (offDayThread, offDayThreadText) = self.prep_and_post(
@@ -1030,7 +1033,9 @@ Last Updated: """
                         text = self._truncate_post(text)
                         self.lemmy.editPost(offDayThread["post"]["id"], text)
                         self.log.info("Off day thread edits submitted.")
-                        self.count_check_edit(offDayThread["post"]["id"], "NA", edit=True)
+                        self.count_check_edit(
+                            offDayThread["post"]["id"], "NA", edit=True
+                        )
                         self.log_last_updated_date_in_db(offDayThread["post"]["id"])
                     elif text == "":
                         self.log.info(
@@ -1038,7 +1043,9 @@ Last Updated: """
                         )
                     else:
                         self.log.info("No changes to off day thread.")
-                        self.count_check_edit(offDayThread["post"]["id"], "NA", edit=False)
+                        self.count_check_edit(
+                            offDayThread["post"]["id"], "NA", edit=False
+                        )
                 except Exception as e:
                     self.log.error("Error editing off day thread: {}".format(e))
                     self.error_notification("Error editing off day thread")
@@ -1114,11 +1121,7 @@ Last Updated: """
 
         if redball.SIGNAL is not None or self.bot.STOP:
             self.log.debug("Caught a stop signal...")
-
-        # Mark off day thread as stale so it will be unstickied tomorrow
-        if offDayThread:
-            self.staleThreads.append(offDayThread)
-
+        self.mark_thread_stale("off", "offDayThread")
         self.log.debug("Ending off day update thread...")
         return
 
@@ -1184,29 +1187,6 @@ Last Updated: """
             self.log.debug("Caught a stop signal...")
             return
 
-        # Unsticky stale threads
-        # if self.settings.get("Reddit", {}).get("STICKY", False):
-        #     """
-        #     # Make sure the subreddit's sticky posts are marked as stale
-        #     try:
-        #         sticky1 = self.subreddit.sticky(1)
-        #         if sticky1.author == self.reddit.user.me() and sticky1 not in self.staleThreads and not next((True for v in self.activeGames.values() if sticky1 in [v.get('gameThread'), v.get('postGameThread')]), None):
-        #             self.log.debug('Marking {} as stale (top sticky slot).'.format(sticky1.id))
-        #             self.staleThreads.append(sticky1)
-
-        #         sticky2 = self.subreddit.sticky(2)
-        #         if sticky2.author == self.reddit.user.me() and sticky2 not in self.staleThreads and not next((True for v in self.activeGames.values() if sticky2 in [v.get('gameThread'), v.get('postGameThread')]), None):
-        #             self.log.debug('Marking {} as stale (bottom sticky slot).'.format(sticky2.id))
-        #             self.staleThreads.append(sticky2)
-        #     except Exception:
-        #         # Exception likely due to no post being stickied (or only one), so ignore it...
-        #         pass
-        #     """
-
-        #     if len(self.staleThreads):
-        #         self.unsticky_threads(self.staleThreads)
-        #         self.staleThreads = []
-
         # Check if game day thread already posted (record in threads table with gamePk and type='gameday' for any of today's gamePks)
         gdq = "select * from {}threads where type='gameday' and gamePk in ({}) and gameDate = '{}' and deleted=0;".format(
             self.dbTablePrefix,
@@ -1255,7 +1235,8 @@ Last Updated: """
                     }
                 )
                 # Only sticky when posting the thread
-                if self.settings.get('Reddit',{}).get('STICKY',False): self.sticky_thread(gameDayThread)
+                if self.settings.get("Reddit", {}).get("STICKY", False):
+                    self.sticky_thread(gameDayThread)
 
         # Check if post game thread is already posted, and skip game day thread if so
         if (
@@ -1526,12 +1507,7 @@ Last Updated: """
 
         if redball.SIGNAL is not None or self.bot.STOP:
             self.log.debug("Caught a stop signal...")
-            return
-
-        # Mark game day thread as stale
-        if self.activeGames[pk].get("gameDayThread"):
-            self.staleThreads.append(self.activeGames[pk]["gameDayThread"])
-
+        self.mark_thread_stale("gameday", "gameDayThread")
         self.log.debug("Ending gameday update thread...")
         return
 
@@ -1843,22 +1819,7 @@ Last Updated: """
             if redball.SIGNAL is not None or self.bot.STOP:
                 self.log.debug("Caught a stop signal...")
                 return
-
-            # Unsticky stale threads
-            if self.settings.get("Lemmy", {}).get("STICKY", False):
-                # Make sure game day thread is marked as stale, since we want the game thread to be sticky instead
-                if (
-                    self.activeGames.get("gameday", {}).get("gameDayThread")
-                    and self.activeGames["gameday"]["gameDayThread"]
-                    not in self.staleThreads
-                ):
-                    self.staleThreads.append(
-                        self.activeGames["gameday"]["gameDayThread"]
-                    )
-
-                if len(self.staleThreads):
-                    self.unsticky_threads(self.staleThreads)
-                    self.staleThreads = []
+            self.mark_thread_stale("gameday", "gameDayThread")
 
             if skipFlag or not self.settings.get("Game Thread", {}).get(
                 "ENABLED", True
@@ -2183,15 +2144,11 @@ Last Updated: """ + self.convert_timezone(
 
         if redball.SIGNAL is not None or self.bot.STOP:
             self.log.debug("Caught a stop signal...")
-            return
-
-        self.log.info("All finished with game {}!".format(pk))
-        self.activeGames[pk].update({"STOP_FLAG": True})
-
-        # Mark game thread as stale
-        if self.activeGames[pk].get("gameThread"):
-            self.staleThreads.append(self.activeGames[pk]["gameThread"])
-
+        else:
+            self.log.info("All finished with game {}!".format(pk))
+            self.activeGames[pk].update({"STOP_FLAG": True})
+        self.mark_thread_stale(pk, 'gameThread')
+        self.mark_thread_stale(pk, 'highlightThread')
         self.log.debug("Ending game update thread...")
         return
 
@@ -2253,18 +2210,8 @@ Last Updated: """ + self.convert_timezone(
             self.log.debug("Caught a stop signal...")
             return
 
-        # Unsticky stale threads
-        if self.settings.get("Lemmy", {}).get("STICKY", False):
-            # Make sure game thread is marked as stale, since we want the post game thread to be sticky instead
-            if (
-                self.activeGames[pk].get("gameThread")
-                and self.activeGames[pk]["gameThread"] not in self.staleThreads
-            ):
-                self.staleThreads.append(self.activeGames[pk]["gameThread"])
-
-            if len(self.staleThreads):
-                self.unsticky_threads(self.staleThreads)
-                self.staleThreads = []
+        # if this thread is starting, the game and hilight threads are finishing
+        self.mark_thread_stale(pk, 'gameThread')
 
         # TODO: Skip for (straight?) doubleheader game 1?
         # TODO: Loop in case thread creation fails due to title template error or API error? At least break from update loop...
@@ -2314,7 +2261,8 @@ Last Updated: """ + self.convert_timezone(
                     }
                 )
                 # Only sticky when posting the thread
-                if self.settings.get('Reddit',{}).get('STICKY',False): self.sticky_thread(self.activeGames[pk]['postGameThread'])
+                if self.settings.get("Reddit", {}).get("STICKY", False):
+                    self.sticky_thread(self.activeGames[pk]["postGameThread"])
 
         game_result = (
             "EXCEPTION"
@@ -2482,7 +2430,7 @@ Last Updated: """ + self.convert_timezone(
             elif update_postgame_thread_until == "An hour after thread is posted":
                 if (
                         datetime.utcnow() - datetime.strptime(self.activeGames[pk]["postGameThread"]["post"]["published"],
-                                                           '%Y-%m-%dT%H:%M:%S.%f')
+                                                           POST_DT_FORMAT)
                         >= timedelta(hours=1)
                 ):
                     # Post game thread was posted more than an hour ago
@@ -2544,11 +2492,7 @@ Last Updated: """ + self.convert_timezone(
 
         if redball.SIGNAL is not None or self.bot.STOP:
             self.log.debug("Caught a stop signal...")
-            return
-
-        # Mark post game thread as stale if sticky is enabled
-        if postGameThread:
-            self.staleThreads.append(postGameThread)
+        self.mark_thread_stale(pk, 'postGameThread')
         self.log.debug("Ending post game update thread...")
         return  # All done with this game!
 
@@ -3562,7 +3506,7 @@ Last Updated: """ + self.convert_timezone(
                     ).strftime("%Y-%m-%d")
                     + "T"
                     + datetime.utcnow().strftime("%H:%M:%SZ"),
-                    "%Y-%m-%dT%H:%M:%SZ",
+                    MLB_DT_FORMAT,
                 ).replace(
                     tzinfo=pytz.utc
                 )  # UTC time is in the next day
@@ -3571,13 +3515,13 @@ Last Updated: """ + self.convert_timezone(
                         self.today["Y-m-d"]
                         + "T"
                         + datetime.now().strftime("%H:%M:%SZ"),
-                        "%Y-%m-%dT%H:%M:%SZ",
+                        MLB_DT_FORMAT,
                     ).replace(tzinfo=tzlocal.get_localzone())
                     - datetime.strptime(
                         self.today["Y-m-d"]
                         + "T"
                         + datetime.utcnow().strftime("%H:%M:%SZ"),
-                        "%Y-%m-%dT%H:%M:%SZ",
+                        MLB_DT_FORMAT,
                     ).replace(tzinfo=pytz.utc)
                 ).total_seconds()
                 / 60
@@ -3586,7 +3530,7 @@ Last Updated: """ + self.convert_timezone(
                 > 0.5  # With "today" date, difference between time in UTC and local is more than 12hr
                 else datetime.strptime(
                     self.today["Y-m-d"] + "T" + datetime.utcnow().strftime("%H:%M:%SZ"),
-                    "%Y-%m-%dT%H:%M:%SZ",
+                    MLB_DT_FORMAT,
                 ).replace(
                     tzinfo=pytz.utc
                 )  # Date is still the same when time is converted to UTC
@@ -3605,7 +3549,7 @@ Last Updated: """ + self.convert_timezone(
                     for date in sc["dates"]
                     for game_index, game in enumerate(date["games"])
                     if datetime.strptime(
-                        game["gameDate"], "%Y-%m-%dT%H:%M:%SZ"
+                        game["gameDate"], MLB_DT_FORMAT
                     ).replace(tzinfo=pytz.utc)
                     > lookAfter
                 ),
@@ -3618,24 +3562,24 @@ Last Updated: """ + self.convert_timezone(
                         "gameTime": {
                             "myTeam": self.convert_timezone(
                                 datetime.strptime(
-                                    nextGame["gameDate"], "%Y-%m-%dT%H:%M:%SZ"
+                                    nextGame["gameDate"], MLB_DT_FORMAT
                                 ).replace(tzinfo=pytz.utc),
                                 self.myTeam["venue"]["timeZone"]["id"],
                             ),
                             "homeTeam": self.convert_timezone(
                                 datetime.strptime(
-                                    nextGame["gameDate"], "%Y-%m-%dT%H:%M:%SZ"
+                                    nextGame["gameDate"], MLB_DT_FORMAT
                                 ).replace(tzinfo=pytz.utc),
                                 nextGame["venue"]["timeZone"]["id"],
                             ),
                             "bot": self.convert_timezone(
                                 datetime.strptime(
-                                    nextGame["gameDate"], "%Y-%m-%dT%H:%M:%SZ"
+                                    nextGame["gameDate"], MLB_DT_FORMAT
                                 ).replace(tzinfo=pytz.utc),
                                 "local",
                             ),
                             "utc": datetime.strptime(
-                                nextGame["gameDate"], "%Y-%m-%dT%H:%M:%SZ"
+                                nextGame["gameDate"], MLB_DT_FORMAT
                             ).replace(tzinfo=pytz.utc),
                         }
                     }
@@ -3822,10 +3766,10 @@ Last Updated: """ + self.convert_timezone(
                                 self.log.debug(f"DH Game 1: {otherGame['gamePk']}")
                                 x["gameDate"] = (
                                     datetime.strptime(
-                                        otherGame["gameDate"], "%Y-%m-%dT%H:%M:%SZ"
+                                        otherGame["gameDate"], MLB_DT_FORMAT
                                     ).replace(tzinfo=pytz.utc)
                                     + timedelta(hours=3)
-                                ).strftime("%Y-%m-%dT%H:%M:%SZ")
+                                ).strftime(MLB_DT_FORMAT)
                                 self.log.info(
                                     f"Replaced game time for DH Game 2 [{x['gamePk']}] to 3 hours after Game 1 [{otherGame['gamePk']}] game time: [{x['gameDate']}]"
                                 )
@@ -3840,18 +3784,18 @@ Last Updated: """ + self.convert_timezone(
                                 "gameTime": {
                                     "myTeam": self.convert_timezone(
                                         datetime.strptime(
-                                            x["gameDate"], "%Y-%m-%dT%H:%M:%SZ"
+                                            x["gameDate"], MLB_DT_FORMAT
                                         ).replace(tzinfo=pytz.utc),
                                         self.myTeam["venue"]["timeZone"]["id"],
                                     ),
                                     "bot": self.convert_timezone(
                                         datetime.strptime(
-                                            x["gameDate"], "%Y-%m-%dT%H:%M:%SZ"
+                                            x["gameDate"], MLB_DT_FORMAT
                                         ).replace(tzinfo=pytz.utc),
                                         "local",
                                     ),
                                     "utc": datetime.strptime(
-                                        x["gameDate"], "%Y-%m-%dT%H:%M:%SZ"
+                                        x["gameDate"], MLB_DT_FORMAT
                                     ).replace(tzinfo=pytz.utc),
                                 }
                             }
@@ -3861,7 +3805,7 @@ Last Updated: """ + self.convert_timezone(
                                 {
                                     "homeTeam": self.convert_timezone(
                                         datetime.strptime(
-                                            x["gameDate"], "%Y-%m-%dT%H:%M:%SZ"
+                                            x["gameDate"], MLB_DT_FORMAT
                                         ).replace(tzinfo=pytz.utc),
                                         self.myTeam["venue"]["timeZone"]["id"],
                                     ),
@@ -3875,7 +3819,7 @@ Last Updated: """ + self.convert_timezone(
                                 {
                                     "homeTeam": self.convert_timezone(
                                         datetime.strptime(
-                                            x["gameDate"], "%Y-%m-%dT%H:%M:%SZ"
+                                            x["gameDate"], MLB_DT_FORMAT
                                         ).replace(tzinfo=pytz.utc),
                                         x["venue"]["timeZone"]["id"],
                                     ),
@@ -4081,10 +4025,10 @@ Last Updated: """ + self.convert_timezone(
                             self.log.debug(f"DH Game 1: {otherGame['gamePk']}")
                             game["gameDate"] = (
                                 datetime.strptime(
-                                    otherGame["gameDate"], "%Y-%m-%dT%H:%M:%SZ"
+                                    otherGame["gameDate"], MLB_DT_FORMAT
                                 ).replace(tzinfo=pytz.utc)
                                 + timedelta(hours=3)
-                            ).strftime("%Y-%m-%dT%H:%M:%SZ")
+                            ).strftime(MLB_DT_FORMAT)
                             self.log.info(
                                 f"Replaced game time for DH Game 2 [{game['gamePk']}] to 3 hours after Game 1 [{otherGame['gamePk']}] game time: [{game['gameDate']}] -- pkData['schedule']['gameDate']: [{pkData['schedule']['gameDate']}]"
                             )
@@ -4099,7 +4043,7 @@ Last Updated: """ + self.convert_timezone(
                                 "myTeam": self.convert_timezone(
                                     datetime.strptime(
                                         pkData["schedule"]["gameDate"],
-                                        "%Y-%m-%dT%H:%M:%SZ",
+                                        MLB_DT_FORMAT,
                                     ).replace(tzinfo=pytz.utc),
                                     self.commonData[0]["myTeam"]["venue"]["timeZone"][
                                         "id"
@@ -4108,19 +4052,19 @@ Last Updated: """ + self.convert_timezone(
                                 "homeTeam": self.convert_timezone(
                                     datetime.strptime(
                                         pkData["schedule"]["gameDate"],
-                                        "%Y-%m-%dT%H:%M:%SZ",
+                                        MLB_DT_FORMAT,
                                     ).replace(tzinfo=pytz.utc),
                                     pkData["schedule"]["venue"]["timeZone"]["id"],
                                 ),
                                 "bot": self.convert_timezone(
                                     datetime.strptime(
                                         pkData["schedule"]["gameDate"],
-                                        "%Y-%m-%dT%H:%M:%SZ",
+                                        MLB_DT_FORMAT,
                                     ).replace(tzinfo=pytz.utc),
                                     "local",
                                 ),
                                 "utc": datetime.strptime(
-                                    pkData["schedule"]["gameDate"], "%Y-%m-%dT%H:%M:%SZ"
+                                    pkData["schedule"]["gameDate"], MLB_DT_FORMAT
                                 ).replace(tzinfo=pytz.utc),
                             }
                         }
@@ -5483,7 +5427,7 @@ Last Updated: """ + self.convert_timezone(
         return ""
 
     def sticky_thread(self, thread):
-        self.log.info("Stickying thread [{}]...".format(thread["post"]["id"]))
+        self.log.info("{LINE()}-Stickying thread [{}]...".format(thread["post"]["id"]))
         try:
             self.lemmy.stickyPost(thread["post"]["id"])
             self.log.info("Thread [{}] stickied...".format(thread["post"]["id"]))
@@ -5494,19 +5438,64 @@ Last Updated: """ + self.convert_timezone(
                 )
             )
 
-    def unsticky_threads(self, threads):
-        for t in threads:
-            try:
-                self.log.debug(
-                    "Attempting to unsticky thread [{}]".format(t["post"]["id"])
+    def mark_thread_stale(self, ttype, thread):
+        # Schedule thread for deferred processing
+        # (Currently just unstickys it)
+        if self.settings.get("Lemmy", {}).get("STICKY", False) or self.settings.get("Reddit", {}).get("STICKY", False):
+            if (
+                    self.activeGames.get(ttype, {}).get(thread)
+                    and self.activeGames[ttype][thread]
+                    not in self.staleThreads
+            ):
+                self.log.info(
+                    f"({LINE()}-Marking {thread} ({self.activeGames[ttype][thread]['post']['id']}) stale."
                 )
-                self.lemmy.unStickyPost(t["post"]["id"])
-            except Exception:
-                self.log.debug(
-                    "Unsticky of thread [{}] failed. Check mod privileges or the thread may not have been sticky.".format(
-                        t.id
-                    )
+                self.staleThreads.append(
+                    self.activeGames[ttype][thread]
                 )
+            else:
+                tt_info = self.activeGames.get(ttype, f'No record for {ttype}')
+                self.log.info(f"{LINE()}-Unable to mark {thread} stale: [ {tt_info} ]")
+            self.log.info(f"staleThreads: {self.staleThreads}")
+
+    def process_stale_threads(self):
+        # This function handles any deferred thread updates
+        # Threads are marked stale when they finish updating
+        # and/or when a new thread type is added that supercedes
+        # previos thread types.
+        #
+        # Currently this function just unstickys stale threads
+        self.log.info(f"{LINE()}-Processing {len(self.staleThreads)} stale threads: {self.staleThreads}")
+        for t in self.staleThreads:
+            self.unsticky_thread(t)
+        self.staleThreads = []
+        # Clean up stuck threads from yesterday
+        for p in self.lemmy.listPosts():
+            if (
+                    p['post']['featured_community']
+                    and
+                    p["creator"]["name"] == self.lemmy.username
+                    and
+                    "weeekly" not in p['post']['name'].lower()
+                    and
+                    datetime.strptime(p['post']['published'], POST_DT_FORMAT).date() < datetime.utcnow().date()
+            ):
+
+                self.log.warning(f'Post #{p["post"]["id"]} was left sticky yesterday.')
+                self.lemmy.unStickyPost(p['post']['id'])
+
+    def unsticky_thread(self, thread):
+        try:
+            self.log.info(
+                "Attempting to unsticky thread [{}]".format(thread["post"]["id"])
+            )
+            self.lemmy.unStickyPost(thread["post"]["id"])
+        except Exception:
+            self.log.info(
+                "Unsticky of thread [{}] failed. Check mod privileges or the thread may not have been sticky.".format(
+                    thread.id
+                )
+            )
 
     def api_call(self, endpoint, params, retries=-1, force=False):
         s = {}
@@ -6331,7 +6320,9 @@ Last Updated: """ + self.convert_timezone(
 
     def _truncate_post(self, text):
         warning_text = " \  # Truncated, post length limit reached."
-        max_length = self.settings.get("Lemmy", {}).get("POST_CHARACTER_LIMIT", 10000) - len(warning_text)
+        max_length = self.settings.get("Lemmy", {}).get(
+            "POST_CHARACTER_LIMIT", 10000
+        ) - len(warning_text)
         if len(text) >= max_length:
             new_text = text[0:max_length - 1]
             new_text += warning_text
