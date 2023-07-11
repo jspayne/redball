@@ -5478,7 +5478,7 @@ Last Updated: """ + self.convert_timezone(
                     and
                     "weeekly" not in p['post']['name'].lower()
                     and
-                    datetime.strptime(p['post']['published'], POST_DT_FORMAT).date() < datetime.utcnow().date()
+                    self.convert_timezone(datetime.strptime(p['post']['published'], POST_DT_FORMAT), self.myTeam["venue"]["timeZone"]["id"]).date() < self.convert_timezone(datetime.utcnow(), self.myTeam["venue"]["timeZone"]["id"]).date()
             ):
 
                 self.log.warning(f'Post #{p["post"]["id"]} was left sticky yesterday.')
