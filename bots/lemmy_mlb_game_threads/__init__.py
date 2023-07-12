@@ -36,8 +36,10 @@ GAME_DATA_LOCK = threading.Lock()
 POST_DT_FORMAT = "%Y-%m-%dT%H:%M:%S.%f"
 MLB_DT_FORMAT = "%Y-%m-%dT%H:%M:%SZ"
 
+
 def LINE():
     return currentframe().f_back.f_back.f_lineno
+
 
 def run(bot, settings):
     thisBot = Bot(bot, settings)
@@ -2147,8 +2149,8 @@ Last Updated: """ + self.convert_timezone(
         else:
             self.log.info("All finished with game {}!".format(pk))
             self.activeGames[pk].update({"STOP_FLAG": True})
-        self.mark_thread_stale(pk, 'gameThread')
-        self.mark_thread_stale(pk, 'highlightThread')
+        self.mark_thread_stale(pk, "gameThread")
+        self.mark_thread_stale(pk, "highlightThread")
         self.log.debug("Ending game update thread...")
         return
 
@@ -2211,7 +2213,7 @@ Last Updated: """ + self.convert_timezone(
             return
 
         # if this thread is starting, the game and hilight threads are finishing
-        self.mark_thread_stale(pk, 'gameThread')
+        self.mark_thread_stale(pk, "gameThread")
 
         # TODO: Skip for (straight?) doubleheader game 1?
         # TODO: Loop in case thread creation fails due to title template error or API error? At least break from update loop...
@@ -2428,11 +2430,10 @@ Last Updated: """ + self.convert_timezone(
                 self.activeGames[pk].update({"POST_STOP_FLAG": True})
                 break
             elif update_postgame_thread_until == "An hour after thread is posted":
-                if (
-                        datetime.utcnow() - datetime.strptime(self.activeGames[pk]["postGameThread"]["post"]["published"],
-                                                           POST_DT_FORMAT)
-                        >= timedelta(hours=1)
-                ):
+                if datetime.utcnow() - datetime.strptime(
+                    self.activeGames[pk]["postGameThread"]["post"]["published"],
+                    POST_DT_FORMAT,
+                ) >= timedelta(hours=1):
                     # Post game thread was posted more than an hour ago
                     self.log.info(
                         "Post game thread was posted an hour ago. Stopping post game thread update loop per UPDATE_UNTIL setting."
@@ -2492,7 +2493,7 @@ Last Updated: """ + self.convert_timezone(
 
         if redball.SIGNAL is not None or self.bot.STOP:
             self.log.debug("Caught a stop signal...")
-        self.mark_thread_stale(pk, 'postGameThread')
+        self.mark_thread_stale(pk, "postGameThread")
         self.log.debug("Ending post game update thread...")
         return  # All done with this game!
 
@@ -3548,9 +3549,9 @@ Last Updated: """ + self.convert_timezone(
                     date["games"][game_index]
                     for date in sc["dates"]
                     for game_index, game in enumerate(date["games"])
-                    if datetime.strptime(
-                        game["gameDate"], MLB_DT_FORMAT
-                    ).replace(tzinfo=pytz.utc)
+                    if datetime.strptime(game["gameDate"], MLB_DT_FORMAT).replace(
+                        tzinfo=pytz.utc
+                    )
                     > lookAfter
                 ),
                 {},
@@ -5441,20 +5442,19 @@ Last Updated: """ + self.convert_timezone(
     def mark_thread_stale(self, ttype, thread):
         # Schedule thread for deferred processing
         # (Currently just unstickys it)
-        if self.settings.get("Lemmy", {}).get("STICKY", False) or self.settings.get("Reddit", {}).get("STICKY", False):
+        if self.settings.get("Lemmy", {}).get("STICKY", False) or self.settings.get(
+            "Reddit", {}
+        ).get("STICKY", False):
             if (
-                    self.activeGames.get(ttype, {}).get(thread)
-                    and self.activeGames[ttype][thread]
-                    not in self.staleThreads
+                self.activeGames.get(ttype, {}).get(thread)
+                and self.activeGames[ttype][thread] not in self.staleThreads
             ):
                 self.log.info(
                     f"({LINE()}-Marking {thread} ({self.activeGames[ttype][thread]['post']['id']}) stale."
                 )
-                self.staleThreads.append(
-                    self.activeGames[ttype][thread]
-                )
+                self.staleThreads.append(self.activeGames[ttype][thread])
             else:
-                tt_info = self.activeGames.get(ttype, f'No record for {ttype}')
+                tt_info = self.activeGames.get(ttype, f"No record for {ttype}")
                 self.log.info(f"{LINE()}-Unable to mark {thread} stale: [ {tt_info} ]")
             self.log.info(f"staleThreads: {self.staleThreads}")
 
@@ -5465,24 +5465,28 @@ Last Updated: """ + self.convert_timezone(
         # previos thread types.
         #
         # Currently this function just unstickys stale threads
-        self.log.info(f"{LINE()}-Processing {len(self.staleThreads)} stale threads: {self.staleThreads}")
+        self.log.info(
+            f"{LINE()}-Processing {len(self.staleThreads)} stale threads: {self.staleThreads}"
+        )
         for t in self.staleThreads:
             self.unsticky_thread(t)
         self.staleThreads = []
         # Clean up stuck threads from yesterday
         for p in self.lemmy.listPosts():
             if (
-                    p['post']['featured_community']
-                    and
-                    p["creator"]["name"] == self.lemmy.username
-                    and
-                    "weeekly" not in p['post']['name'].lower()
-                    and
-                    self.convert_timezone(datetime.strptime(p['post']['published'], POST_DT_FORMAT), self.myTeam["venue"]["timeZone"]["id"]).date() < self.convert_timezone(datetime.utcnow(), self.myTeam["venue"]["timeZone"]["id"]).date()
+                p["post"]["featured_community"]
+                and p["creator"]["name"] == self.lemmy.username
+                and "weeekly" not in p["post"]["name"].lower()
+                and self.convert_timezone(
+                    datetime.strptime(p["post"]["published"], POST_DT_FORMAT),
+                    self.myTeam["venue"]["timeZone"]["id"],
+                ).date()
+                < self.convert_timezone(
+                    datetime.utcnow(), self.myTeam["venue"]["timeZone"]["id"]
+                ).date()
             ):
-
                 self.log.warning(f'Post #{p["post"]["id"]} was left sticky yesterday.')
-                self.lemmy.unStickyPost(p['post']['id'])
+                self.lemmy.unStickyPost(p["post"]["id"])
 
     def unsticky_thread(self, thread):
         try:
@@ -5640,7 +5644,9 @@ Last Updated: """ + self.convert_timezone(
         with redball.REDDIT_AUTH_LOCKS[str(self.bot.redditAuth)]:
             try:
                 # Check for Lemmy
-                instance_name = self.settings.get("Lemmy Auth", {}).get("lemmy_instance", "")
+                instance_name = self.settings.get("Lemmy Auth", {}).get(
+                    "lemmy_instance", ""
+                )
                 username = self.settings.get("Lemmy Auth", {}).get("lemmy_username", "")
                 password = self.settings.get("Lemmy Auth", {}).get("lemmy_password", "")
                 community = self.settings.get("Lemmy", {}).get("COMMUNITY_NAME")
@@ -6324,7 +6330,7 @@ Last Updated: """ + self.convert_timezone(
             "POST_CHARACTER_LIMIT", 10000
         ) - len(warning_text)
         if len(text) >= max_length:
-            new_text = text[0:max_length - 1]
+            new_text = text[0 : max_length - 1]
             new_text += warning_text
         else:
             new_text = text
