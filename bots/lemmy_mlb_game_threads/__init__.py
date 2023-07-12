@@ -962,7 +962,7 @@ class Bot(object):
                     }
                 )
                 # Only sticky when posting the thread
-                if self.settings.get("Reddit", {}).get("STICKY", False):
+                if self.settings.get("Lemmy", {}).get("STICKY", False):
                     self.sticky_thread(offDayThread)
 
         if not offDayThread:
@@ -1237,7 +1237,7 @@ Last Updated: """
                     }
                 )
                 # Only sticky when posting the thread
-                if self.settings.get("Reddit", {}).get("STICKY", False):
+                if self.settings.get("Lemmy", {}).get("STICKY", False):
                     self.sticky_thread(gameDayThread)
 
         # Check if post game thread is already posted, and skip game day thread if so
@@ -2263,7 +2263,7 @@ Last Updated: """ + self.convert_timezone(
                     }
                 )
                 # Only sticky when posting the thread
-                if self.settings.get("Reddit", {}).get("STICKY", False):
+                if self.settings.get("Lemmy", {}).get("STICKY", False):
                     self.sticky_thread(self.activeGames[pk]["postGameThread"])
 
         game_result = (
@@ -5442,9 +5442,7 @@ Last Updated: """ + self.convert_timezone(
     def mark_thread_stale(self, ttype, thread):
         # Schedule thread for deferred processing
         # (Currently just unstickys it)
-        if self.settings.get("Lemmy", {}).get("STICKY", False) or self.settings.get(
-            "Reddit", {}
-        ).get("STICKY", False):
+        if self.settings.get("Lemmy", {}).get("STICKY", False):
             if (
                 self.activeGames.get(ttype, {}).get(thread)
                 and self.activeGames[ttype][thread] not in self.staleThreads
