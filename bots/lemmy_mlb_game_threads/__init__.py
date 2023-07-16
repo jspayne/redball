@@ -37,7 +37,9 @@ POST_DT_FORMAT = "%Y-%m-%dT%H:%M:%S.%f"
 MLB_DT_FORMAT = "%Y-%m-%dT%H:%M:%SZ"
 
 
-def LINE():
+def caller_line():
+    # Current frame is this function, first back is for function
+    # being debugged, second back is for the caller of that function.
     return currentframe().f_back.f_back.f_lineno
 
 
@@ -5428,7 +5430,7 @@ Last Updated: """ + self.convert_timezone(
         return ""
 
     def sticky_thread(self, thread):
-        self.log.info("{LINE()}-Stickying thread [{}]...".format(thread["post"]["id"]))
+        self.log.info("Stickying thread [{}]...".format(thread["post"]["id"]))
         try:
             self.lemmy.stickyPost(thread["post"]["id"])
             self.log.info("Thread [{}] stickied...".format(thread["post"]["id"]))
@@ -5448,12 +5450,12 @@ Last Updated: """ + self.convert_timezone(
                 and self.activeGames[ttype][thread] not in self.staleThreads
             ):
                 self.log.info(
-                    f"({LINE()}-Marking {thread} ({self.activeGames[ttype][thread]['post']['id']}) stale."
+                    f"({caller_line()}-Marking {thread} ({self.activeGames[ttype][thread]['post']['id']}) stale."
                 )
                 self.staleThreads.append(self.activeGames[ttype][thread])
             else:
                 tt_info = self.activeGames.get(ttype, f"No record for {ttype}")
-                self.log.info(f"{LINE()}-Unable to mark {thread} stale: [ {tt_info} ]")
+                self.log.info(f"{caller_line()}-Unable to mark {thread} stale: [ {tt_info} ]")
             self.log.info(f"staleThreads: {self.staleThreads}")
 
     def process_stale_threads(self):
@@ -5464,7 +5466,7 @@ Last Updated: """ + self.convert_timezone(
         #
         # Currently this function just unstickys stale threads
         self.log.info(
-            f"{LINE()}-Processing {len(self.staleThreads)} stale threads: {self.staleThreads}"
+            f"{caller_line()}-Processing {len(self.staleThreads)} stale threads: {self.staleThreads}"
         )
         for t in self.staleThreads:
             self.unsticky_thread(t)
