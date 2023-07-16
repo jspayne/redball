@@ -53,6 +53,7 @@ class Bot(object):
         self.BOT_TEMPLATE_PATH.append(os.path.join(self.BOT_PATH, "templates"))
 
         self.LOOKUP = TemplateLookup(directories=self.BOT_TEMPLATE_PATH)
+        self.BOT_CONFIG_PATH = self.settings.get("Bot", {}).get("CONFIG_PATH", "") or os.path.join(self.BOT_PATH, "config")
 
     def run(self):
         self.log = logger.init_logger(
@@ -3896,7 +3897,14 @@ Last Updated: """ + self.convert_timezone(
                     {"nextGame": self.get_nextGame(self.myTeam["id"])}
                 )
 
-                # Include team community dict
+                # Update team community dict
+                team_url_file = os.path.join(self.BOT_CONFIG_PATH, self.settings.get("Lemmy", {}).get("TEAM_URL_FILE") or "team_urls.json")
+                with open(team_url_file, 'r') as f:
+                    team_subs = json.load(f)
+                # Convert the keys to int to coincide with the MLB data
+                # If the config file is empty or incomplete, this will use self.teamSubs as the default.
+                for key, val in team_subs.items():
+                    self.teamSubs[int(key)] = val
                 pkData.update({"teamSubs": self.teamSubs})
 
                 # Team leaders (hitting, pitching)
@@ -5712,7 +5720,7 @@ Last Updated: """ + self.convert_timezone(
         return dt.astimezone(to_tz)
 
     teamSubs = {
-        142: "/c/minnesotatwins@fanaticus.social",
+        142: "/c/default@fanaticus.social",
         145: "/c/whitesox@fanaticus.social",
         116: "/c/motorcitykitties@fanaticus.social",
         118: "/c/kcroyals@fanaticus.social",
@@ -5743,7 +5751,6 @@ Last Updated: """ + self.convert_timezone(
         120: "/c/nationals@fanaticus.social",
         144: "/c/braves@fanaticus.social",
         0: "/c/baseball@fanaticus.social",
-        "mlb": "/c/baseball@fanaticus.social",
     }
 
     def bot_state(self):
