@@ -5720,7 +5720,7 @@ Last Updated: """ + self.convert_timezone(
         return dt.astimezone(to_tz)
 
     teamSubs = {
-        142: "/c/default@fanaticus.social",
+        142: "/c/minnesotatwins@fanaticus.social",
         145: "/c/whitesox@fanaticus.social",
         116: "/c/motorcitykitties@fanaticus.social",
         118: "/c/kcroyals@fanaticus.social",
