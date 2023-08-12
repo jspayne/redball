@@ -79,7 +79,7 @@ class Bot(object):
         )
         self.build_tables()
 
-        # Initialize Reddit API connection
+        # Initialize Lemmy API connection
         self.init_lemmy()
 
         # Initialize scheduler
@@ -295,17 +295,7 @@ class Bot(object):
             otherTodayGamesDetails = {}
             for g in [g for g in todayGames if g["id"] != myTeamTodayGameId]:
                 try:
-                    g_did = next(
-                        (
-                            x["id"]
-                            for x in g["externalIds"]
-                            if x["source"] == "gamedetail"
-                        ),
-                        "0",
-                    )
-                    g_details = self.nfl.shieldQuery(
-                        f"query%7Bviewer%7BgameDetail(id%3A%22{g_did}%22)%7Bid%20attendance%20distance%20down%20gameClock%20goalToGo%20homePointsOvertime%20homePointsTotal%20homePointsQ1%20homePointsQ2%20homePointsQ3%20homePointsQ4%20homeTeam%7Babbreviation%20nickName%7DhomeTimeoutsUsed%20homeTimeoutsRemaining%20period%20phase%20playReview%20possessionTeam%7Babbreviation%20nickName%7Dredzone%20stadium%20startTime%20visitorPointsOvertime%20visitorPointsOvertimeTotal%20visitorPointsQ1%20visitorPointsQ2%20visitorPointsQ3%20visitorPointsQ4%20visitorPointsTotal%20visitorTeam%7Babbreviation%20nickName%7DvisitorTimeoutsUsed%20visitorTimeoutsRemaining%20homePointsOvertimeTotal%20visitorPointsOvertimeTotal%20possessionTeam%7BnickName%7Dweather%7BcurrentFahrenheit%20location%20longDescription%20shortDescription%20currentRealFeelFahrenheit%7DyardLine%20yardsToGo%7D%7D%7D"
-                    )
+                    g_details = self.nfl.gameDetails(g["id"])
                     g_details = (
                         g_details.get("data", {})
                         .get("viewer", {})
@@ -314,7 +304,7 @@ class Bot(object):
                 except Exception as e:
                     if "404" in str(e):
                         self.log.debug(
-                            f"Game detail id is not active in shield API yet for other today game [{g['id']}]: {e}"
+                            f"Game detail is not published in NFL API yet for other today game [{g['id']}]: {e}"
                         )
                     else:
                         self.log.debug(
@@ -453,22 +443,23 @@ class Bot(object):
                 )
                 """ Holds data about current week games, including detailed data for my team's game """
                 try:
-                    gameDetails = self.nfl.gameDetails(
-                        gameDetailId=next(
-                            (
-                                x["id"]
-                                for x in todayGames[myGameIndex]["externalIds"]
-                                if x["source"] == "gamedetail"
-                            ),
-                            "0",
-                        )
-                    )
+                    gameDetails = self.nfl.gameDetails(myTeamTodayGameId)
                 except Exception as e:
                     if "404" in str(e):
                         self.log.debug(
-                            f"Game detail id is not active in shield API yet: {e}"
+                            f"Game detail is not published in NFL API yet: {e}"
                         )
                         gameDetails = {}
+                    else:
+                        raise
+                try:
+                    gameSummary = self.nfl.gameSummaryById(self.allData["gameId"])
+                except Exception as e:
+                    if "404" in str(e):
+                        self.log.debug(
+                            f"Game summary is not published in NFL API yet: {e}"
+                        )
+                        gameSummary = {}
                     else:
                         raise
                 self.allData.update(
@@ -476,6 +467,7 @@ class Bot(object):
                         "gameDetails": gameDetails.get("data", {})
                         .get("viewer", {})
                         .get("gameDetail", {}),
+                        "gameSummary": gameSummary,
                     }
                 )
                 if redball.DEV:
@@ -838,7 +830,7 @@ class Bot(object):
             return
 
         # Unsticky stale threads
-        if self.settings.get("Reddit", {}).get("STICKY", False):
+        if self.settings.get("Lemmy", {}).get("STICKY", False):
             if len(self.staleThreads):
                 self.unsticky_threads(self.staleThreads)
                 self.staleThreads = []
@@ -851,7 +843,7 @@ class Bot(object):
         if len(tgThread) > 0:
             self.log.info(f"Tailgate thread found in database [{tgThread[0]['id']}].")
             tailgateThread = self.lemmy.getPost(tgThread[0]["id"])
-            if not tailgateThread.author:
+            if not tailgateThread.get('creator', None):
                 self.log.warning("Tailgate thread appears to have been deleted.")
                 q = "update {}threads set deleted=1 where id='{}';".format(
                     self.dbTablePrefix, tailgateThread.id
@@ -864,22 +856,22 @@ class Bot(object):
 
                 tailgateThread = None
             else:
-                if tailgateThread.selftext.find("\n\n^Last^ ^Updated^") != -1:
-                    tailgateThreadText = tailgateThread.selftext[
-                        0 : tailgateThread.selftext.find("\n\n^Last^ ^Updated:^")
+                if tailgateThread['post']['body'].find("\n\n^Last^ ^Updated") != -1:
+                    tailgateThreadText = tailgateThread['post']['body'][
+                        0 : tailgateThread['post']['body'].find("\n\n^Last^ ^Updated:^")
                     ]
-                elif tailgateThread.selftext.find("\n\n^Posted^") != -1:
-                    tailgateThreadText = tailgateThread.selftext[
-                        0 : tailgateThread.selftext.find("\n\n^Posted:^")
+                elif tailgateThread['post']['body'].find("\n\n^Posted") != -1:
+                    tailgateThreadText = tailgateThread['post']['body'][
+                        0 : tailgateThread['post']['body'].find("\n\n^Posted:^")
                     ]
                 else:
-                    tailgateThreadText = tailgateThread.selftext
+                    tailgateThreadText = tailgateThread['post']['body']
 
                 self.threadCache["tailgate"].update(
                     {
                         "text": tailgateThreadText,
                         "thread": tailgateThread,
-                        "title": tailgateThread.title
+                        "title": tailgateThread['post']['name']
                         if tailgateThread not in [None, False]
                         else None,
                     }
@@ -959,13 +951,14 @@ class Bot(object):
                                 )
                             )
                         )
-                        self.threadCache["tailgate"]["thread"].edit(text)
+                        self.lemmy.editPost(threadCache["post"]["id"], title=threadCache["post"]["name"], body=text)
+                        # self.threadCache["tailgate"]["thread"].edit(text)
                         self.log.info("Tailgate thread edits submitted.")
                         self.count_check_edit(
-                            self.threadCache["tailgate"]["thread"].id, "NA", edit=True
+                            self.threadCache["tailgate"]["thread"]['post']['id'], "NA", edit=True
                         )
                         self.log_last_updated_date_in_db(
-                            self.threadCache["tailgate"]["thread"].id
+                            self.threadCache["tailgate"]["thread"]['post']['id']
                         )
                     elif text == "":
                         self.log.info(
@@ -974,7 +967,7 @@ class Bot(object):
                     else:
                         self.log.info("No changes to tailgate thread.")
                         self.count_check_edit(
-                            self.threadCache["tailgate"]["thread"].id, "NA", edit=False
+                            self.threadCache["tailgate"]["thread"]['post']['id'], "NA", edit=False
                         )
                 except Exception as e:
                     self.log.error("Error editing tailgate thread: {}".format(e))
@@ -1107,7 +1100,7 @@ class Bot(object):
         if len(gThread) > 0:
             self.log.info("Game thread found in database [{}]".format(gThread[0]["id"]))
             gameThread = self.lemmy.getPost(gThread[0]["id"])
-            if not gameThread.author:
+            if not gameThread['creator']:
                 self.log.warning("Game thread appears to have been deleted.")
                 q = "update {}threads set deleted=1 where id='{}';".format(
                     self.dbTablePrefix, gameThread.id
@@ -1120,22 +1113,22 @@ class Bot(object):
 
                 gameThread = None
             else:
-                if gameThread.selftext.find("\n\n^Last^ ^Updated^") != -1:
-                    gameThreadText = gameThread.selftext[
-                        0 : gameThread.selftext.find("\n\n^Last^ ^Updated:^")
+                if gameThread['post']['body'].find("\n\n^Last^ ^Updated^") != -1:
+                    gameThreadText = gameThread['post']['body'][
+                        0 : gameThread['post']['body'].find("\n\n^Last^ ^Updated:^")
                     ]
-                elif gameThread.selftext.find("\n\n^Posted^") != -1:
-                    gameThreadText = gameThread.selftext[
-                        0 : gameThread.selftext.find("\n\n^Posted:^")
+                elif gameThread['post']['body'].find("\n\n^Posted^") != -1:
+                    gameThreadText = gameThread['post']['body'][
+                        0 : gameThread['post']['body'].find("\n\n^Posted:^")
                     ]
                 else:
-                    gameThreadText = gameThread.selftext
+                    gameThreadText = gameThread['post']['body']
 
                 self.threadCache["game"].update(
                     {
                         "thread": gameThread,
                         "text": gameThreadText,
-                        "title": gameThread.title
+                        "title": gameThread['post']['name']
                         if gameThread not in [None, False]
                         else None,
                     }
@@ -1252,7 +1245,7 @@ class Bot(object):
                 return
 
             # Unsticky stale threads
-            if self.settings.get("Reddit", {}).get("STICKY", False):
+            if self.settings.get("Lemmy", {}).get("STICKY", False):
                 # Make sure tailgate thread is marked as stale, since we want the game thread to be sticky instead
                 if (
                     self.threadCache.get("tailgate", {}).get("thread")
@@ -1291,7 +1284,7 @@ class Bot(object):
                     {
                         "thread": gameThread,
                         "text": gameThreadText,
-                        "title": gameThread.title
+                        "title": gameThread['post']['name']
                         if gameThread not in [None, False]
                         else None,
                     }
@@ -1342,15 +1335,15 @@ class Bot(object):
                             ),
                         ).strftime("^%m/%d/%Y^ ^%I:%M:%S^ ^%p^ ^%Z^")
                     )
-                    self.threadCache["game"]["thread"].edit(text)
+                    self.lemmy.editPost(gameThread["post"]["id"], title=gameThread["post"]["name"], body=text)
                     self.log.info("Edits submitted for game thread.")
                     self.count_check_edit(
-                        self.threadCache["game"]["thread"].id,
+                        self.threadCache["game"]["thread"]['post']['id'],
                         self.allData["gameDetails"].get("phase", "UNKNOWN"),
                         edit=True,
                     )
                     self.log_last_updated_date_in_db(
-                        self.threadCache["game"]["thread"].id
+                        self.threadCache["game"]["thread"]['post']['id']
                     )
                 elif text == "":
                     self.log.info(
@@ -1359,7 +1352,7 @@ class Bot(object):
                 else:
                     self.log.info("No changes to game thread.")
                     self.count_check_edit(
-                        self.threadCache["game"]["thread"].id,
+                        self.threadCache["game"]["thread"]['post']['id'],
                         self.allData["gameDetails"].get("phase", "UNKNOWN"),
                         edit=False,
                     )
@@ -1549,7 +1542,7 @@ class Bot(object):
             return
 
         # Unsticky stale threads
-        if self.settings.get("Reddit", {}).get("STICKY", False):
+        if self.settings.get("Lemmy", {}).get("STICKY", False):
             # Make sure game thread is marked as stale, since we want the post game thread to be sticky instead
             if (
                 self.threadCache["game"].get("thread")
@@ -1587,16 +1580,16 @@ class Bot(object):
 
                 postGameThread = None
             else:
-                if postGameThread.selftext.find("\n\n^Last^ ^Updated^") != -1:
-                    postGameThreadText = postGameThread.selftext[
-                        0 : postGameThread.selftext.find("\n\n^Last^ ^Updated:^")
+                if postGameThread['post']['body'].find("\n\n^Last^ ^Updated^") != -1:
+                    postGameThreadText = postGameThread['post']['body'][
+                        0 : postGameThread['post']['body'].find("\n\n^Last^ ^Updated:^")
                     ]
-                elif postGameThread.selftext.find("\n\n^Posted^") != -1:
-                    postGameThreadText = postGameThread.selftext[
-                        0 : postGameThread.selftext.find("\n\n^Posted:^")
+                elif postGameThread['post']['body'].find("\n\n^Posted^") != -1:
+                    postGameThreadText = postGameThread['post']['body'][
+                        0 : postGameThread['post']['body'].find("\n\n^Posted:^")
                     ]
                 else:
-                    postGameThreadText = postGameThread.selftext
+                    postGameThreadText = postGameThread['post']['body']
 
                 self.threadCache["post"].update(
                     {
@@ -1671,13 +1664,14 @@ class Bot(object):
                                 ),
                             ).strftime("^%m/%d/%Y^ ^%I:%M:%S^ ^%p^ ^%Z^")
                         )
-                        self.threadCache["post"]["thread"].edit(text)
+                        self.lemmy.editPost(threadCache["post"]["id"], title=threadCache["post"]["name"], body=text)
+                        # self.threadCache["post"]["thread"].edit(text)
                         self.log.info("Post game thread edits submitted.")
                         self.log_last_updated_date_in_db(
-                            self.threadCache["post"]["thread"].id
+                            self.threadCache["post"]["thread"]['post']['id']
                         )
                         self.count_check_edit(
-                            self.threadCache["post"]["thread"].id,
+                            self.threadCache["post"]["thread"]['post']['id'],
                             self.allData["gameDetails"].get("phase", "UNKNOWN"),
                             edit=True,
                         )
@@ -1688,7 +1682,7 @@ class Bot(object):
                     else:
                         self.log.info("No changes to post game thread.")
                         self.count_check_edit(
-                            self.threadCache["post"]["thread"].id,
+                            self.threadCache["post"]["thread"]['post']['id'],
                             self.allData["gameDetails"].get("phase", "UNKNOWN"),
                             edit=False,
                         )
@@ -1857,31 +1851,11 @@ class Bot(object):
                 ),
                 None,
             )
-            gameDetailId = next(
-                (
-                    x["id"]
-                    for x in todayGames[myGameIndex]["externalIds"]
-                    if x["source"] == "gamedetail"
-                ),
-                "0",
-            )
-            self.log.debug(
-                f"self.allData['gameId']: {self.allData['gameId']}; gameDetailId: {gameDetailId}"
-            )
+            self.log.debug(f"self.allData['gameId']: {self.allData['gameId']}")
             otherTodayGamesDetails = {}
             for g in [g for g in todayGames if g["id"] != self.allData["gameId"]]:
                 try:
-                    g_did = next(
-                        (
-                            x["id"]
-                            for x in g["externalIds"]
-                            if x["source"] == "gamedetail"
-                        ),
-                        "0",
-                    )
-                    g_details = self.nfl.shieldQuery(
-                        f"query%7Bviewer%7BgameDetail(id%3A%22{g_did}%22)%7Bid%20attendance%20distance%20down%20gameClock%20goalToGo%20homePointsOvertime%20homePointsTotal%20homePointsQ1%20homePointsQ2%20homePointsQ3%20homePointsQ4%20homeTeam%7Babbreviation%20nickName%7DhomeTimeoutsUsed%20homeTimeoutsRemaining%20period%20phase%20playReview%20possessionTeam%7Babbreviation%20nickName%7Dredzone%20stadium%20startTime%20visitorPointsOvertime%20visitorPointsOvertimeTotal%20visitorPointsQ1%20visitorPointsQ2%20visitorPointsQ3%20visitorPointsQ4%20visitorPointsTotal%20visitorTeam%7Babbreviation%20nickName%7DvisitorTimeoutsUsed%20visitorTimeoutsRemaining%20homePointsOvertimeTotal%20visitorPointsOvertimeTotal%20possessionTeam%7BnickName%7Dweather%7BcurrentFahrenheit%20location%20longDescription%20shortDescription%20currentRealFeelFahrenheit%7DyardLine%20yardsToGo%7D%7D%7D"
-                    )
+                    g_details = self.nfl.gameDetails(g["id"])
                     g_details = (
                         g_details.get("data", {})
                         .get("viewer", {})
@@ -1890,7 +1864,7 @@ class Bot(object):
                 except Exception as e:
                     if "404" in str(e):
                         self.log.debug(
-                            f"Game detail id is not active in shield API yet for other today game [{g['id']}]: {e}"
+                            f"Game detail is not published in NFL API yet for other today game [{g['id']}]: {e}"
                         )
                     else:
                         self.log.debug(
@@ -1899,21 +1873,10 @@ class Bot(object):
                     g_details = {}
                 otherTodayGamesDetails.update({g["id"]: g_details})
             try:
-                gameDetails = self.nfl.gameDetails(
-                    gameDetailId=next(
-                        (
-                            x["id"]
-                            for x in todayGames[myGameIndex]["externalIds"]
-                            if x["source"] == "gamedetail"
-                        ),
-                        "0",
-                    )
-                )
+                gameDetails = self.nfl.gameDetails(self.allData["gameId"])
             except Exception as e:
                 if "404" in str(e):
-                    self.log.debug(
-                        f"Game detail id is not active in shield API yet: {e}"
-                    )
+                    self.log.debug(f"Game detail is not published in NFL API yet: {e}")
                     gameDetails = {}
                 else:
                     raise
@@ -1970,6 +1933,32 @@ class Bot(object):
             except Exception as e:
                 self.log.error(f"Error retrieving standings: {e}")
                 standings = []
+            try:
+                myGameSummary = self.nfl.gameSummaryById(self.allData["gameId"])
+            except Exception as e:
+                if "404" in str(e):
+                    self.log.debug(f"Game summary is not published in NFL API yet: {e}")
+                    myGameSummary = {}
+                else:
+                    raise
+            try:
+                allGameSummaries_raw = self.nfl.gameSummariesByWeek(
+                    season=self.allData["currentWeek"]["season"],
+                    seasonType=self.allData["currentWeek"]["seasonType"],
+                    week=self.allData["currentWeek"]["week"],
+                )
+            except Exception as e:
+                if "404" in str(e):
+                    self.log.debug(
+                        f"Game summaries are not published in NFL API yet: {e}"
+                    )
+                    allGameSummaries_raw = {}
+                else:
+                    raise
+            otherWeekGameSummaries = {}
+            for gs in allGameSummaries_raw.get("data", []):
+                if gs["gameId"] != self.allData["gameId"]:
+                    otherWeekGameSummaries.update({gs["gameId"]: gs})
             self.allData.update(
                 {
                     "myTeam": self.nfl.teamById(
@@ -1993,6 +1982,8 @@ class Bot(object):
                     },
                     "myGameIndex": myGameIndex,
                     "standings": standings,
+                    "gameSummary": myGameSummary,
+                    "otherWeekGameSummaries": otherWeekGameSummaries,
                     "lastUpdate": datetime.today(),
                 }
             )
@@ -2110,11 +2101,11 @@ class Bot(object):
             title = None
             self.error_notification(f"Error rendering title for {thread} thread")
 
-        sticky = self.settings.get("Reddit", {}).get("STICKY", False) is True
+        sticky = self.settings.get("Lemmy", {}).get("STICKY", False) is True
         inboxReplies = (
-            self.settings.get("Reddit", {}).get("INBOX_REPLIES", False) is True
+            self.settings.get("Lemmy", {}).get("INBOX_REPLIES", False) is True
         )
-        flairMode = self.settings.get("Reddit", {}).get("FLAIR_MODE", "none")
+        flairMode = self.settings.get("Lemmy", {}).get("FLAIR_MODE", "none")
         flair = (
             self.settings.get("Tailgate Thread", {}).get("FLAIR", "")
             if thread == "tailgate"
@@ -2172,16 +2163,16 @@ class Bot(object):
                 ):                    # Found existing thread...
                     self.log.info("Found an existing {} thread...".format(thread))
                     theThread = p
-                    if theThread.selftext.find("\n\n^Last^ ^Updated^") != -1:
-                        text = theThread.selftext[
-                            0 : theThread.selftext.find("\n\n^Last^ ^Updated:^")
+                    if theThread['post']['body'].find("\n\n^Last^ ^Updated^") != -1:
+                        text = theThread['post']['body'][
+                            0 : theThread['post']['body'].find("\n\n^Last^ ^Updated:^")
                         ]
-                    elif theThread.selftext.find("\n\n^Posted^") != -1:
-                        text = theThread.selftext[
-                            0 : theThread.selftext.find("\n\n^Posted:^")
+                    elif theThread['post']['body'].find("\n\n^Posted^") != -1:
+                        text = theThread['post']['body'][
+                            0 : theThread['post']['body'].find("\n\n^Posted:^")
                         ]
                     else:
-                        text = theThread.selftext
+                        text = theThread['post']['body']
 
                     if sticky:
                         self.sticky_thread(theThread)
@@ -2295,7 +2286,7 @@ class Bot(object):
                 self.notify_prowl(
                     apiKey=prowlKey,
                     event=f"{self.myTeam['nickName']} {thread.title()} Thread Posted",
-                    description=f"""{self.myTeam['nickName']} {thread} thread was posted to r/{self.settings["Reddit"]["SUBREDDIT"]} at {self.convert_timezone(datetime.utcfromtimestamp(theThread.created_utc),'local').strftime('%I:%M %p %Z')}\nThread title: {theThread.title}\nURL: {theThread.shortlink}""",
+                    description=f"""{self.myTeam['nickName']} {thread} thread was posted to {self.settings["Lemmy"]["COMMUNITY_NAME"]} at {self.convert_timezone(datetime.utcfromtimestamp(theThread.created_utc),'local').strftime('%I:%M %p %Z')}\nThread title: {theThread.title}\nURL: {theThread.shortlink}""",
                     priority=prowlPriority,
                     url=theThread.shortlink,
                     appName=f"redball - {self.bot.name}",
@@ -2816,13 +2807,13 @@ class Bot(object):
                     "posted": True
                     if self.threadCache.get("tailgate", {}).get("thread")
                     else False,
-                    "id": self.threadCache.get("tailgate", {}).get("thread").id
+                    "id": self.threadCache.get("tailgate", {}).get("thread")['post']['id']
                     if self.threadCache.get("tailgate", {}).get("thread")
                     else None,
-                    "url": self.threadCache.get("tailgate", {}).get("thread").shortlink
+                    "url": self.threadCache.get("tailgate", {}).get("thread")['ap_id']
                     if self.threadCache.get("tailgate", {}).get("thread")
                     else None,
-                    "title": self.threadCache.get("tailgate", {}).get("title")
+                    "title": self.threadCache.get("tailgate", {}).get("name")
                     if self.threadCache.get("tailgate", {}).get("thread")
                     else None,
                 },
@@ -2851,13 +2842,13 @@ class Bot(object):
                             "posted": True
                             if self.threadCache["game"].get("thread")
                             else False,
-                            "id": self.threadCache["game"].get("thread").id
+                            "id": self.threadCache["game"].get("thread")['post']['id']
                             if self.threadCache["game"].get("thread")
                             else None,
-                            "url": self.threadCache["game"].get("thread").shortlink
+                            "url": self.threadCache["game"].get("thread")['ap_id']
                             if self.threadCache["game"].get("thread")
                             else None,
-                            "title": self.threadCache["game"].get("title")
+                            "title": self.threadCache["game"].get("name")
                             if self.threadCache["game"].get("thread")
                             else None,
                         },
@@ -2868,13 +2859,13 @@ class Bot(object):
                             "posted": True
                             if self.threadCache["post"].get("thread")
                             else False,
-                            "id": self.threadCache["post"].get("thread").id
+                            "id": self.threadCache["post"].get("thread")['post']['id']
                             if self.threadCache["post"].get("thread")
                             else None,
-                            "url": self.threadCache["post"].get("thread").shortlink
+                            "url": self.threadCache["post"].get("thread")['ap_id']
                             if self.threadCache["post"].get("thread")
                             else None,
-                            "title": self.threadCache["post"].get("title")
+                            "title": self.threadCache["post"].get("name")
                             if self.threadCache["post"].get("thread")
                             else None,
                         },
