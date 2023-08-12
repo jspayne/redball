@@ -951,7 +951,7 @@ class Bot(object):
                                 )
                             )
                         )
-                        self.lemmy.editPost(threadCache["post"]["id"], title=threadCache["post"]["name"], body=text)
+                        self.lemmy.editPost(self.threadCache["tailgate"]["thread"]['post']['id'], title=self.threadCache["tailgate"]["thread"]['post']["name"], body=text)
                         # self.threadCache["tailgate"]["thread"].edit(text)
                         self.log.info("Tailgate thread edits submitted.")
                         self.count_check_edit(
