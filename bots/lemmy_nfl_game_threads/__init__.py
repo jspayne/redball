@@ -1567,7 +1567,7 @@ class Bot(object):
                 "Post Game Thread found in database [{}].".format(pgThread[0]["id"])
             )
             postGameThread = self.lemmy.getPost(pgThread[0]["id"])
-            if not postGameThread.author:
+            if not postGameThread['creator']:
                 self.log.warning("Post game thread appears to have been deleted.")
                 q = "update {}threads set deleted=1 where id='{}';".format(
                     self.dbTablePrefix, postGameThread.id
@@ -1595,7 +1595,7 @@ class Bot(object):
                     {
                         "thread": postGameThread,
                         "text": postGameThreadText,
-                        "title": postGameThread.title
+                        "title": postGameThread['post']['name']
                         if postGameThread not in [None, False]
                         else None,
                     }
@@ -1621,7 +1621,7 @@ class Bot(object):
                 {
                     "thread": postGameThread,
                     "text": postGameThreadText,
-                    "title": postGameThread.title
+                    "title": postGameThread['post']['name']
                     if postGameThread not in [None, False]
                     else None,
                 }
@@ -1664,7 +1664,7 @@ class Bot(object):
                                 ),
                             ).strftime("^%m/%d/%Y^ ^%I:%M:%S^ ^%p^ ^%Z^")
                         )
-                        self.lemmy.editPost(threadCache["post"]["id"], title=threadCache["post"]["name"], body=text)
+                        self.lemmy.editPost(self.threadCache["post"]["id"], title=self.threadCache["post"]["name"], body=text)
                         # self.threadCache["post"]["thread"].edit(text)
                         self.log.info("Post game thread edits submitted.")
                         self.log_last_updated_date_in_db(
@@ -2195,7 +2195,7 @@ class Bot(object):
                 self.log.error("Error rendering {} text: {}".format(thread, e))
                 text = None
                 self.error_notification(
-                    f"{thread.title()} thread not posted due to failure rendering title or text."
+                    f"{thread['post']['name']} thread not posted due to failure rendering title or text."
                 )
 
             if not (title and text):
@@ -2285,8 +2285,8 @@ class Bot(object):
             else:
                 self.notify_prowl(
                     apiKey=prowlKey,
-                    event=f"{self.myTeam['nickName']} {thread.title()} Thread Posted",
-                    description=f"""{self.myTeam['nickName']} {thread} thread was posted to {self.settings["Lemmy"]["COMMUNITY_NAME"]} at {self.convert_timezone(datetime.utcfromtimestamp(theThread.created_utc),'local').strftime('%I:%M %p %Z')}\nThread title: {theThread.title}\nURL: {theThread.shortlink}""",
+                    event=f"{self.myTeam['nickName']} {thread['post']['name']} Thread Posted",
+                    description=f"""{self.myTeam['nickName']} {thread} thread was posted to {self.settings["Lemmy"]["COMMUNITY_NAME"]} at {self.convert_timezone(datetime.utcfromtimestamp(theThread.created_utc),'local').strftime('%I:%M %p %Z')}\nThread title: {theThread['post']['name']}\nURL: {theThread.shortlink}""",
                     priority=prowlPriority,
                     url=theThread.shortlink,
                     appName=f"redball - {self.bot.name}",
@@ -2309,11 +2309,11 @@ class Bot(object):
                 self.log.debug("Twitter disabled or not configured")
             else:
                 if thread == "game":
-                    message = f"""{theThread.title} - Join the discussion: {theThread.shortlink} #{self.myTeam['nickName'].replace(' ','')}"""
+                    message = f"""{theThread['post']['name']} - Join the discussion: {theThread.shortlink} #{self.myTeam['nickName'].replace(' ','')}"""
                 elif thread == "tailgate":
-                    message = f"""{theThread.title} - Join the discussion: {theThread.shortlink} #{self.myTeam['nickName'].replace(' ','')}"""
+                    message = f"""{theThread['post']['name']} - Join the discussion: {theThread.shortlink} #{self.myTeam['nickName'].replace(' ','')}"""
                 elif thread == "post":
-                    message = f"""{theThread.title} - The discussion continues: {theThread.shortlink} #{self.myTeam['nickName'].replace(' ','')}"""
+                    message = f"""{theThread['post']['name']} - The discussion continues: {theThread.shortlink} #{self.myTeam['nickName'].replace(' ','')}"""
                 else:
                     self.log.error(f"Can't tweet about unknown thread type [{thread}]!")
                     return (None, text)
