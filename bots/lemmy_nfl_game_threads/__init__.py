@@ -1713,12 +1713,10 @@ class Bot(object):
                 self.stopFlags.update({"post": True})
                 break
             elif update_postgame_thread_until == "An hour after thread is posted":
-                self.log.debug(
-                    f'Thread posted: {int(self.threadCache["post"]["thread"].created_utc)}, 1 hour ago: {round(time.time()) - 3600}, minutes to go: {60 - (round((time.time() - int(self.threadCache["post"]["thread"].created_utc)) / 60))}'
-                )
                 if (
-                    int(self.threadCache["post"]["thread"].created_utc)
-                    <= int(time.time()) - 3600
+                        datetime.utcnow() - datetime.strptime(postGameThread["post"]["published"],
+                                                           '%Y-%m-%dT%H:%M:%S.%f')
+                        >= timedelta(hours=1)
                 ):
                     # Post game thread was posted more than an hour ago
                     self.log.info(
