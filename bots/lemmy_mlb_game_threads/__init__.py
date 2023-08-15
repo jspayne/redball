@@ -5484,7 +5484,7 @@ Last Updated: """ + self.convert_timezone(
             if (
                 p["post"]["featured_community"]
                 and p["creator"]["name"] == self.lemmy.username
-                and "weeekly" not in p["post"]["name"].lower()
+                and "weekly" not in p["post"]["name"].lower()
                 and self.convert_timezone(
                     datetime.strptime(p["post"]["published"], POST_DT_FORMAT),
                     self.myTeam["venue"]["timeZone"]["id"],
